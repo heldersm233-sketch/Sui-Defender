@@ -15,6 +15,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Memory bank documentation
 - [x] Recipe system for common features
 - [x] Memecoin HTML5 canvas game (converted from Pygame to Next.js/TypeScript)
+- [x] SUI Defender game: mouse-aim shooter with SUI coin at center, BTC/ETH/SOL meteor enemies, crosshair cursor, score popups, sound effects, space background with color flash on kill
 
 ## Current Structure
 
