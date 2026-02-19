@@ -17,6 +17,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Memecoin HTML5 canvas game (converted from Pygame to Next.js/TypeScript)
 - [x] SUI Defender game: mouse-aim shooter with SUI coin at center, BTC/ETH/SOL meteor enemies, crosshair cursor, score popups, sound effects, space background with color flash on kill
 - [x] SUI Defender v2: circular wave attacks (LMB=simple -10 SUI, RMB=strong -30 SUI), single HP bar (100% → -10% per hit), Start screen, Pause button (P/Esc), background music (Web Audio procedural), improved ETH diamond logo, improved SOL stacked-bars logo
+- [x] SUI Defender v3: fixed wave attack (now expands from SUI center outward, hits all meteors in ring path), hold-to-charge mechanic (click=simple wave, hold 2s=strong wave), charge progress ring UI, improved SUI logo (official S-curve shape), crosshair color changes during charge
 
 ## Current Structure
 
