@@ -38,9 +38,11 @@ const COIN_COLORS: Record<string, { primary: string; secondary: string; text: st
 const COIN_TYPES = ["BTC", "ETH", "SOL"] as const;
 type CoinType = (typeof COIN_TYPES)[number];
 
-// Attack wave — always originates from SUI center
+// Attack wave — originates from where the player clicks
 interface Wave {
   id: number;
+  x: number; // origin X
+  y: number; // origin Y
   radius: number;
   maxRadius: number;
   alpha: number;
@@ -268,6 +270,20 @@ function generateStars(): GameState["stars"] {
   return stars;
 }
 
+// Speed multipliers per coin type — higher reward = faster = harder
+const COIN_SPEED: Record<CoinType, number> = {
+  BTC: 1.9, // fastest — worth most
+  ETH: 1.4, // medium
+  SOL: 1.0, // slowest — worth least
+};
+
+// Score rewards per coin type
+const COIN_SCORE: Record<CoinType, number> = {
+  BTC: 50,
+  ETH: 30,
+  SOL: 20,
+};
+
 function spawnMeteor(id: number): Meteor {
   const type = COIN_TYPES[Math.floor(Math.random() * COIN_TYPES.length)];
   const radius = 22 + Math.random() * 14;
@@ -281,7 +297,8 @@ function spawnMeteor(id: number): Meteor {
   const dx = CENTER_X - x;
   const dy = CENTER_Y - y;
   const dist = Math.sqrt(dx * dx + dy * dy);
-  const speed = 1.2 + Math.random() * 1.4;
+  const baseSpeed = 0.9 + Math.random() * 0.8;
+  const speed = baseSpeed * COIN_SPEED[type];
   return {
     id,
     type,
@@ -467,7 +484,7 @@ export default function Game() {
   const gamePhaseRef = useRef<"start" | "playing" | "paused" | "gameover">("start");
 
   const stateRef = useRef<GameState>({
-    score: 0,
+    score: 100,
     hp: 100,
     meteors: [],
     particles: [],
@@ -494,7 +511,7 @@ export default function Game() {
   const resetState = useCallback(() => {
     const prev = stateRef.current;
     stateRef.current = {
-      score: 0,
+      score: 100,
       hp: 100,
       meteors: [],
       particles: [],
@@ -517,8 +534,8 @@ export default function Game() {
     };
   }, []);
 
-  // ── Fire wave attack — always from SUI center ─────────────────────────────
-  const fireWave = useCallback((strong: boolean) => {
+  // ── Fire wave attack — from click position ────────────────────────────────
+  const fireWave = useCallback((strong: boolean, originX: number, originY: number) => {
     const state = stateRef.current;
     const cost = strong ? 30 : 10;
     if (state.score < cost) return; // not enough SUI
@@ -526,17 +543,19 @@ export default function Game() {
     state.score -= cost;
     playShootSound(strong);
 
-    const maxRadius = strong ? Math.max(WIDTH, HEIGHT) * 0.85 : 220;
+    const maxRadius = strong ? Math.max(WIDTH, HEIGHT) * 1.2 : 260;
     state.waves.push({
       id: state.nextWaveId++,
-      radius: SUI_RADIUS + 5, // start just outside SUI coin
+      x: originX,
+      y: originY,
+      radius: 8, // start small at click point
       maxRadius,
       alpha: 1,
       strong,
     });
   }, []);
 
-  // ── Mouse down: start charge timer ───────────────────────────────────────
+  // ── Mouse down: start charge timer, record click position ────────────────
   const handleMouseDown = useCallback((e: MouseEvent) => {
     if (e.button !== 0) return; // only left button
     const phase = gamePhaseRef.current;
@@ -545,18 +564,11 @@ export default function Game() {
     stateRef.current.chargeProgress = 0;
   }, []);
 
-  // ── Mouse up: fire wave based on hold duration ────────────────────────────
+  // ── Mouse up: fire wave from click position based on hold duration ────────
   const handleMouseUp = useCallback((e: MouseEvent) => {
     if (e.button !== 0) return; // only left button
     const phase = gamePhaseRef.current;
 
-    if (phase === "gameover") {
-      resetState();
-      gamePhaseRef.current = "playing";
-      setGamePhase("playing");
-      startMusic();
-      return;
-    }
     if (phase !== "playing") return;
 
     const state = stateRef.current;
@@ -567,8 +579,9 @@ export default function Game() {
     state.mouseDownTime = null;
     state.chargeProgress = 0;
 
-    fireWave(strong);
-  }, [fireWave, resetState]);
+    // Fire from current mouse position (where the player clicked/released)
+    fireWave(strong, state.mouseX, state.mouseY);
+  }, [fireWave]);
 
   // ── Context menu: prevent default ────────────────────────────────────────
   const handleContextMenu = useCallback((e: MouseEvent) => {
@@ -593,8 +606,15 @@ export default function Game() {
     }
   }, []);
 
-  // ── Start game ────────────────────────────────────────────────────────────
+  // ── Start / Restart game ──────────────────────────────────────────────────
   const startGame = useCallback(() => {
+    resetState();
+    gamePhaseRef.current = "playing";
+    setGamePhase("playing");
+    startMusic();
+  }, [resetState]);
+
+  const restartGame = useCallback(() => {
     resetState();
     gamePhaseRef.current = "playing";
     setGamePhase("playing");
@@ -807,11 +827,11 @@ export default function Game() {
           continue;
         }
 
-        // Check meteor hits — wave ring expands from SUI center
+        // Check meteor hits — wave ring expands from click origin
         for (let j = state.meteors.length - 1; j >= 0; j--) {
           const m = state.meteors[j];
-          const dx = m.x - CENTER_X;
-          const dy = m.y - CENTER_Y;
+          const dx = m.x - w.x;
+          const dy = m.y - w.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           // Wave ring hits meteor if meteor center is within the ring band
           const ringThickness = w.strong ? 28 : 18;
@@ -819,18 +839,25 @@ export default function Game() {
             const coinColor = COIN_COLORS[m.type].primary;
             createExplosion(state.particles, m.x, m.y, coinColor, 22);
             state.bgFlash = { color: coinColor, alpha: 0.45 };
-            const points = m.type === "BTC" ? 300 : m.type === "ETH" ? 200 : 150;
+            const points = COIN_SCORE[m.type];
             state.score += points;
-            state.scorePopups.push({ x: m.x, y: m.y - m.radius, value: points, life: 1, maxLife: 1 });
+            state.scorePopups.push({
+              x: m.x,
+              y: m.y - m.radius,
+              value: points,
+              life: 1,
+              maxLife: 1,
+              color: COIN_COLORS[m.type].primary,
+            });
             playExplosionSound(m.type);
             state.meteors.splice(j, 1);
           }
         }
 
-        // Draw wave ring from SUI center
+        // Draw wave ring from click origin
         ctx.save();
         ctx.beginPath();
-        ctx.arc(CENTER_X, CENTER_Y, w.radius, 0, Math.PI * 2);
+        ctx.arc(w.x, w.y, w.radius, 0, Math.PI * 2);
         const waveColor = w.strong ? "#ff8800" : "#00ffcc";
         ctx.strokeStyle = waveColor;
         ctx.lineWidth = w.strong ? 5 : 3;
@@ -841,7 +868,7 @@ export default function Game() {
 
         // Inner glow ring
         ctx.beginPath();
-        ctx.arc(CENTER_X, CENTER_Y, Math.max(0, w.radius - (w.strong ? 12 : 8)), 0, Math.PI * 2);
+        ctx.arc(w.x, w.y, Math.max(0, w.radius - (w.strong ? 12 : 8)), 0, Math.PI * 2);
         ctx.strokeStyle = waveColor;
         ctx.lineWidth = 1;
         ctx.globalAlpha = w.alpha * 0.3;
@@ -991,7 +1018,7 @@ export default function Game() {
       ctx.textAlign = "left";
       ctx.font = "11px monospace";
       ctx.fillStyle = "rgba(0,255,204,0.6)";
-      ctx.fillText("Click: Wave (-10 SUI)  |  Hold 2s: Strong Wave (-30 SUI)", 18, HEIGHT - 24);
+      ctx.fillText("Click anywhere: Wave (-10 SUI)  |  Hold 2s: Strong Wave (-30 SUI)", 18, HEIGHT - 24);
 
       ctx.restore();
     };
@@ -1025,18 +1052,15 @@ export default function Game() {
       ctx.shadowBlur = 30;
       ctx.fillStyle = "#ff4466";
       ctx.font = "bold 56px monospace";
-      ctx.fillText("GAME OVER", CENTER_X, CENTER_Y - 60);
+      ctx.fillText("GAME OVER", CENTER_X, CENTER_Y - 70);
 
       ctx.shadowColor = "#ffd700";
       ctx.shadowBlur = 15;
       ctx.fillStyle = "#ffd700";
       ctx.font = "bold 32px monospace";
-      ctx.fillText(`Final Score: $${state.score.toLocaleString()}`, CENTER_X, CENTER_Y + 10);
+      ctx.fillText(`Final Score: $${state.score.toLocaleString()} SUI`, CENTER_X, CENTER_Y - 10);
 
       ctx.shadowBlur = 0;
-      ctx.fillStyle = "rgba(0,200,255,0.9)";
-      ctx.font = "20px monospace";
-      ctx.fillText("Click to play again", CENTER_X, CENTER_Y + 70);
       ctx.restore();
     };
 
@@ -1110,7 +1134,7 @@ export default function Game() {
         for (const w of state.waves) {
           ctx.save();
           ctx.beginPath();
-          ctx.arc(CENTER_X, CENTER_Y, w.radius, 0, Math.PI * 2);
+          ctx.arc(w.x, w.y, w.radius, 0, Math.PI * 2);
           const waveColor = w.strong ? "#ff8800" : "#00ffcc";
           ctx.strokeStyle = waveColor;
           ctx.lineWidth = w.strong ? 4 : 2.5;
@@ -1165,7 +1189,7 @@ export default function Game() {
       window.removeEventListener("keydown", handleKeyDown);
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [handleMouseDown, handleMouseUp, handleContextMenu, togglePause]);
+  }, [handleMouseDown, handleMouseUp, handleContextMenu, togglePause, restartGame]);
 
   return (
     <div
@@ -1231,10 +1255,13 @@ export default function Game() {
                 textAlign: "center",
               }}
             >
-              <div>🖱️ <b>Click</b> — Wave attack <span style={{ color: "#00ffcc" }}>(-10 SUI)</span></div>
+              <div>🖱️ <b>Click anywhere</b> — Wave attack <span style={{ color: "#00ffcc" }}>(-10 SUI)</span></div>
               <div>🖱️ <b>Hold 2s</b> — Strong wave <span style={{ color: "#ff8800" }}>(-30 SUI)</span></div>
               <div>⌨️ <b>P / Esc</b> — Pause</div>
               <div>💥 Each meteor hit = <span style={{ color: "#ff4466" }}>-10% HP</span></div>
+              <div style={{ marginTop: "4px", color: "rgba(255,255,255,0.45)", fontSize: "12px" }}>
+                💰 BTC <span style={{ color: "#F7931A" }}>+50</span> · ETH <span style={{ color: "#627EEA" }}>+30</span> · SOL <span style={{ color: "#9945FF" }}>+20</span> · Start balance: <span style={{ color: "#ffd700" }}>100 SUI</span>
+              </div>
             </div>
 
             <button
@@ -1293,6 +1320,54 @@ export default function Game() {
           >
             {gamePhase === "paused" ? "▶ RESUME" : "⏸ PAUSE"}
           </button>
+        )}
+
+        {/* Game Over overlay with restart button */}
+        {gamePhase === "gameover" && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: "16px",
+              gap: "20px",
+              pointerEvents: "none",
+            }}
+          >
+            {/* Spacer to push button below the canvas-drawn text */}
+            <div style={{ height: "120px" }} />
+            <button
+              onClick={restartGame}
+              style={{
+                pointerEvents: "all",
+                padding: "14px 48px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                fontFamily: "monospace",
+                background: "linear-gradient(135deg, #ff4466, #cc0033)",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "10px",
+                cursor: "pointer",
+                boxShadow: "0 0 24px rgba(255,68,102,0.6)",
+                letterSpacing: "2px",
+                transition: "transform 0.1s, box-shadow 0.1s",
+              }}
+              onMouseEnter={e => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1.06)";
+                (e.target as HTMLButtonElement).style.boxShadow = "0 0 40px rgba(255,68,102,0.9)";
+              }}
+              onMouseLeave={e => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1)";
+                (e.target as HTMLButtonElement).style.boxShadow = "0 0 24px rgba(255,68,102,0.6)";
+              }}
+            >
+              🔄 PLAY AGAIN
+            </button>
+          </div>
         )}
       </div>
     </div>
