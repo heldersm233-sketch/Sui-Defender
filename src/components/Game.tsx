@@ -119,57 +119,130 @@ function getAudioCtx(): AudioContext {
   return audioCtx;
 }
 
-// Ambient space music — layered oscillators forming a chord loop
+// Upbeat chiptune-style music — energetic arpeggio + bass + drums
+let musicIntervals: ReturnType<typeof setInterval>[] = [];
+
 function startMusic() {
   if (musicRunning) return;
   try {
     const ctx = getAudioCtx();
     if (ctx.state === "suspended") ctx.resume();
 
-    // Bass drone
-    const bassFreqs = [55, 82.4, 110];
-    bassFreqs.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      gain.gain.value = 0.04 - i * 0.01;
-      osc.start();
-      musicNodes.push({ osc, gain });
-    });
+    // Driving bass line — pumping 8th notes
+    const bassNotes = [110, 110, 138.6, 110, 146.8, 110, 138.6, 123.5];
+    let bassIdx = 0;
+    const bassOsc = ctx.createOscillator();
+    const bassGain = ctx.createGain();
+    bassOsc.connect(bassGain);
+    bassGain.connect(ctx.destination);
+    bassOsc.type = "sawtooth";
+    bassOsc.frequency.value = bassNotes[0];
+    bassGain.gain.value = 0.06;
+    bassOsc.start();
+    musicNodes.push({ osc: bassOsc, gain: bassGain });
 
-    // Mid arpeggio — slowly cycling notes
-    const arpFreqs = [220, 261.6, 329.6, 392, 440, 329.6, 261.6, 220];
-    let arpIdx = 0;
-    const arpOsc = ctx.createOscillator();
-    const arpGain = ctx.createGain();
-    arpOsc.connect(arpGain);
-    arpGain.connect(ctx.destination);
-    arpOsc.type = "triangle";
-    arpOsc.frequency.value = arpFreqs[0];
-    arpGain.gain.value = 0.03;
-    arpOsc.start();
-    musicNodes.push({ osc: arpOsc, gain: arpGain });
+    const bassInterval = setInterval(() => {
+      if (!musicRunning) { clearInterval(bassInterval); return; }
+      bassIdx = (bassIdx + 1) % bassNotes.length;
+      bassOsc.frequency.setValueAtTime(bassNotes[bassIdx], ctx.currentTime);
+      // Pump effect: quick volume swell
+      bassGain.gain.setValueAtTime(0.09, ctx.currentTime);
+      bassGain.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 0.1);
+    }, 150);
+    musicIntervals.push(bassInterval);
 
-    // Cycle arpeggio every 600ms
-    const arpInterval = setInterval(() => {
-      if (!musicRunning) { clearInterval(arpInterval); return; }
-      arpIdx = (arpIdx + 1) % arpFreqs.length;
-      arpOsc.frequency.setTargetAtTime(arpFreqs[arpIdx], ctx.currentTime, 0.05);
-    }, 600);
+    // Lead melody arpeggio — fast and energetic
+    const melodyNotes = [
+      440, 523.3, 659.3, 880,
+      659.3, 523.3, 440, 392,
+      440, 523.3, 587.3, 698.5,
+      587.3, 523.3, 440, 349.2,
+    ];
+    let melIdx = 0;
+    const melOsc = ctx.createOscillator();
+    const melGain = ctx.createGain();
+    melOsc.connect(melGain);
+    melGain.connect(ctx.destination);
+    melOsc.type = "square";
+    melOsc.frequency.value = melodyNotes[0];
+    melGain.gain.value = 0.025;
+    melOsc.start();
+    musicNodes.push({ osc: melOsc, gain: melGain });
 
-    // High shimmer
-    const shimOsc = ctx.createOscillator();
-    const shimGain = ctx.createGain();
-    shimOsc.connect(shimGain);
-    shimGain.connect(ctx.destination);
-    shimOsc.type = "sine";
-    shimOsc.frequency.value = 880;
-    shimGain.gain.value = 0.015;
-    shimOsc.start();
-    musicNodes.push({ osc: shimOsc, gain: shimGain });
+    const melInterval = setInterval(() => {
+      if (!musicRunning) { clearInterval(melInterval); return; }
+      melIdx = (melIdx + 1) % melodyNotes.length;
+      melOsc.frequency.setValueAtTime(melodyNotes[melIdx], ctx.currentTime);
+      melGain.gain.setValueAtTime(0.035, ctx.currentTime);
+      melGain.gain.exponentialRampToValueAtTime(0.018, ctx.currentTime + 0.08);
+    }, 120);
+    musicIntervals.push(melInterval);
+
+    // Counter-melody — harmony notes
+    const harmNotes = [
+      330, 392, 494, 659.3,
+      494, 392, 330, 293.7,
+      330, 392, 440, 523.3,
+      440, 392, 330, 261.6,
+    ];
+    let harmIdx = 0;
+    const harmOsc = ctx.createOscillator();
+    const harmGain = ctx.createGain();
+    harmOsc.connect(harmGain);
+    harmGain.connect(ctx.destination);
+    harmOsc.type = "triangle";
+    harmOsc.frequency.value = harmNotes[0];
+    harmGain.gain.value = 0.018;
+    harmOsc.start();
+    musicNodes.push({ osc: harmOsc, gain: harmGain });
+
+    const harmInterval = setInterval(() => {
+      if (!musicRunning) { clearInterval(harmInterval); return; }
+      harmIdx = (harmIdx + 1) % harmNotes.length;
+      harmOsc.frequency.setValueAtTime(harmNotes[harmIdx], ctx.currentTime);
+    }, 240);
+    musicIntervals.push(harmInterval);
+
+    // Hi-hat percussion — rapid ticking
+    const hihatInterval = setInterval(() => {
+      if (!musicRunning) { clearInterval(hihatInterval); return; }
+      try {
+        const buf = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+        const src = ctx.createBufferSource();
+        const filt = ctx.createBiquadFilter();
+        const g = ctx.createGain();
+        src.buffer = buf;
+        filt.type = "highpass";
+        filt.frequency.value = 8000;
+        src.connect(filt);
+        filt.connect(g);
+        g.connect(ctx.destination);
+        g.gain.value = 0.04;
+        src.start();
+      } catch {}
+    }, 150);
+    musicIntervals.push(hihatInterval);
+
+    // Kick drum — every beat
+    const kickInterval = setInterval(() => {
+      if (!musicRunning) { clearInterval(kickInterval); return; }
+      try {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(180, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.08);
+        g.gain.setValueAtTime(0.5, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.12);
+      } catch {}
+    }, 300);
+    musicIntervals.push(kickInterval);
 
     musicRunning = true;
   } catch {}
@@ -177,6 +250,8 @@ function startMusic() {
 
 function stopMusic() {
   musicRunning = false;
+  for (const id of musicIntervals) clearInterval(id);
+  musicIntervals = [];
   for (const { osc, gain } of musicNodes) {
     try {
       gain.gain.setTargetAtTime(0, audioCtx!.currentTime, 0.1);
@@ -187,19 +262,22 @@ function stopMusic() {
 }
 
 function pauseMusic() {
+  if (!audioCtx) return;
   for (const { gain } of musicNodes) {
     try {
-      gain.gain.setTargetAtTime(0, audioCtx!.currentTime, 0.1);
+      gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.08);
     } catch {}
   }
 }
 
 function resumeMusic() {
-  for (const { gain } of musicNodes) {
+  if (!audioCtx) return;
+  const volumes = [0.06, 0.025, 0.018]; // bass, melody, harmony
+  musicNodes.forEach(({ gain }, i) => {
     try {
-      gain.gain.setTargetAtTime(0.04, audioCtx!.currentTime, 0.1);
+      gain.gain.setTargetAtTime(volumes[i] ?? 0.03, audioCtx!.currentTime, 0.08);
     } catch {}
-  }
+  });
 }
 
 function playShootSound(strong: boolean) {
@@ -534,7 +612,9 @@ export default function Game() {
     };
   }, []);
 
-  // ── Fire wave attack — from click position ────────────────────────────────
+  // ── Fire wave attack ──────────────────────────────────────────────────────
+  // Simple wave: fires from click position, medium radius
+  // Strong wave: fires from SUI center, covers entire screen
   const fireWave = useCallback((strong: boolean, originX: number, originY: number) => {
     const state = stateRef.current;
     const cost = strong ? 30 : 10;
@@ -543,16 +623,31 @@ export default function Game() {
     state.score -= cost;
     playShootSound(strong);
 
-    const maxRadius = strong ? Math.max(WIDTH, HEIGHT) * 1.2 : 260;
-    state.waves.push({
-      id: state.nextWaveId++,
-      x: originX,
-      y: originY,
-      radius: 8, // start small at click point
-      maxRadius,
-      alpha: 1,
-      strong,
-    });
+    if (strong) {
+      // Strong wave: 3 rapid rings from SUI center, guaranteed full-screen coverage
+      for (let ring = 0; ring < 3; ring++) {
+        state.waves.push({
+          id: state.nextWaveId++,
+          x: CENTER_X,
+          y: CENTER_Y,
+          radius: 8 + ring * 30, // staggered start
+          maxRadius: Math.sqrt(WIDTH * WIDTH + HEIGHT * HEIGHT) + 60, // covers all corners
+          alpha: 1,
+          strong: true,
+        });
+      }
+    } else {
+      // Simple wave: fires from click position
+      state.waves.push({
+        id: state.nextWaveId++,
+        x: originX,
+        y: originY,
+        radius: 8,
+        maxRadius: 280,
+        alpha: 1,
+        strong: false,
+      });
+    }
   }, []);
 
   // ── Mouse down: start charge timer, record click position ────────────────
@@ -1223,51 +1318,64 @@ export default function Game() {
               alignItems: "center",
               justifyContent: "center",
               borderRadius: "16px",
-              background: "rgba(2,4,8,0.82)",
-              gap: "24px",
+              background: "rgba(2,4,8,0.88)",
+              gap: "18px",
             }}
           >
+            {/* Title */}
             <div style={{ textAlign: "center" }}>
               <div
                 style={{
-                  fontSize: "48px",
+                  fontSize: "46px",
                   fontWeight: "bold",
                   fontFamily: "monospace",
                   color: "#00c8ff",
                   textShadow: "0 0 30px #00c8ff, 0 0 60px #0088cc",
                   letterSpacing: "4px",
-                  marginBottom: "8px",
+                  marginBottom: "6px",
                 }}
               >
                 ⚡ SUI DEFENDER ⚡
               </div>
-              <div style={{ color: "rgba(255,255,255,0.55)", fontFamily: "monospace", fontSize: "14px" }}>
-                Protect the SUI coin from crypto meteors!
+              <div style={{ color: "rgba(255,255,255,0.55)", fontFamily: "monospace", fontSize: "13px" }}>
+                Proteja a moeda SUI dos meteoros cripto!
               </div>
             </div>
 
+            {/* Instructions box */}
             <div
               style={{
-                color: "rgba(255,255,255,0.7)",
+                background: "rgba(0,200,255,0.06)",
+                border: "1px solid rgba(0,200,255,0.2)",
+                borderRadius: "12px",
+                padding: "16px 28px",
+                color: "rgba(255,255,255,0.75)",
                 fontFamily: "monospace",
                 fontSize: "13px",
                 lineHeight: "2",
                 textAlign: "center",
               }}
             >
-              <div>🖱️ <b>Click anywhere</b> — Wave attack <span style={{ color: "#00ffcc" }}>(-10 SUI)</span></div>
-              <div>🖱️ <b>Hold 2s</b> — Strong wave <span style={{ color: "#ff8800" }}>(-30 SUI)</span></div>
-              <div>⌨️ <b>P / Esc</b> — Pause</div>
-              <div>💥 Each meteor hit = <span style={{ color: "#ff4466" }}>-10% HP</span></div>
-              <div style={{ marginTop: "4px", color: "rgba(255,255,255,0.45)", fontSize: "12px" }}>
-                💰 BTC <span style={{ color: "#F7931A" }}>+50</span> · ETH <span style={{ color: "#627EEA" }}>+30</span> · SOL <span style={{ color: "#9945FF" }}>+20</span> · Start balance: <span style={{ color: "#ffd700" }}>100 SUI</span>
+              <div style={{ color: "#00ffcc", fontWeight: "bold", marginBottom: "4px", fontSize: "14px" }}>
+                🎮 COMO JOGAR
+              </div>
+              <div>🖱️ <b>Clique</b> em qualquer lugar — Onda de ataque <span style={{ color: "#00ffcc" }}>(-10 SUI)</span></div>
+              <div>🖱️ <b>Segure 2s</b> — Onda forte (cobre toda a tela!) <span style={{ color: "#ff8800" }}>(-30 SUI)</span></div>
+              <div>⌨️ <b>P / Esc</b> — Pausar</div>
+              <div>💥 Cada meteoro que acerta = <span style={{ color: "#ff4466" }}>-10% HP</span></div>
+              <div style={{ marginTop: "6px", paddingTop: "6px", borderTop: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", fontSize: "12px" }}>
+                💰 BTC <span style={{ color: "#F7931A" }}>+50 pts</span> · ETH <span style={{ color: "#627EEA" }}>+30 pts</span> · SOL <span style={{ color: "#9945FF" }}>+20 pts</span>
+              </div>
+              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>
+                Saldo inicial: <span style={{ color: "#ffd700" }}>100 SUI</span>
               </div>
             </div>
 
+            {/* Start button */}
             <button
               onClick={startGame}
               style={{
-                padding: "14px 48px",
+                padding: "14px 52px",
                 fontSize: "20px",
                 fontWeight: "bold",
                 fontFamily: "monospace",
@@ -1289,8 +1397,35 @@ export default function Game() {
                 (e.target as HTMLButtonElement).style.boxShadow = "0 0 24px rgba(0,200,255,0.5)";
               }}
             >
-              START GAME
+              🚀 JOGAR
             </button>
+
+            {/* SUI memecoin promo */}
+            <div
+              style={{
+                background: "linear-gradient(135deg, rgba(0,200,255,0.12), rgba(153,69,255,0.12))",
+                border: "1px solid rgba(0,200,255,0.3)",
+                borderRadius: "10px",
+                padding: "10px 24px",
+                textAlign: "center",
+                fontFamily: "monospace",
+              }}
+            >
+              <div style={{ color: "#ffd700", fontWeight: "bold", fontSize: "14px", letterSpacing: "1px" }}>
+                🚀 SUIMEMECOIN — EM BREVE!
+              </div>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "12px", marginTop: "4px" }}>
+                Siga o perfil no X para não perder o lançamento →{" "}
+                <a
+                  href="https://x.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "#00c8ff", textDecoration: "none", fontWeight: "bold" }}
+                >
+                  @suimemecoin
+                </a>
+              </div>
+            </div>
           </div>
         )}
 
