@@ -8,6 +8,7 @@ const SUI_RADIUS = 55;
 const CENTER_X = WIDTH / 2;
 const CENTER_Y = HEIGHT / 2;
 const FPS = 60;
+const HOLD_THRESHOLD_MS = 2000; // 2 seconds hold = strong wave
 
 // Crypto coin colors
 const COIN_COLORS: Record<string, { primary: string; secondary: string; text: string; glow: string; bg: string }> = {
@@ -37,11 +38,9 @@ const COIN_COLORS: Record<string, { primary: string; secondary: string; text: st
 const COIN_TYPES = ["BTC", "ETH", "SOL"] as const;
 type CoinType = (typeof COIN_TYPES)[number];
 
-// Attack wave
+// Attack wave — always originates from SUI center
 interface Wave {
   id: number;
-  x: number;
-  y: number;
   radius: number;
   maxRadius: number;
   alpha: number;
@@ -100,6 +99,9 @@ interface GameState {
   suiPulse: number;
   suiShake: { x: number; y: number; timer: number };
   paused: boolean;
+  // Hold-to-charge state
+  mouseDownTime: number | null; // timestamp when mouse was pressed
+  chargeProgress: number; // 0–1 visual charge indicator
 }
 
 // ─── Web Audio ────────────────────────────────────────────────────────────────
@@ -410,6 +412,54 @@ function drawSOLLogo(ctx: CanvasRenderingContext2D, r: number) {
   ctx.restore();
 }
 
+/** Draw the SUI logo — the official water-drop / teardrop shape */
+function drawSUILogo(ctx: CanvasRenderingContext2D, r: number) {
+  const s = r * 0.72;
+  ctx.save();
+
+  // SUI logo: two mirrored curved strokes forming the "S" wave shape
+  // Based on the official SUI logo geometry
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = r * 0.13;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.shadowColor = "#ffffff";
+  ctx.shadowBlur = 10;
+
+  // Top stroke (curves from top-left to center-right)
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.55, -s * 0.75);
+  ctx.bezierCurveTo(
+    -s * 0.55, -s * 1.1,   // control 1: pull up-left
+     s * 0.55, -s * 1.1,   // control 2: pull up-right
+     s * 0.55, -s * 0.25   // end: center-right
+  );
+  ctx.bezierCurveTo(
+     s * 0.55,  s * 0.1,   // control 1: pull down-right
+     s * 0.0,   s * 0.1,   // control 2: center
+     s * 0.0,   s * 0.1    // end: center
+  );
+  ctx.stroke();
+
+  // Bottom stroke (mirror of top, curves from bottom-right to center-left)
+  ctx.beginPath();
+  ctx.moveTo( s * 0.55,  s * 0.75);
+  ctx.bezierCurveTo(
+     s * 0.55,  s * 1.1,   // control 1: pull down-right
+    -s * 0.55,  s * 1.1,   // control 2: pull down-left
+    -s * 0.55,  s * 0.25   // end: center-left
+  );
+  ctx.bezierCurveTo(
+    -s * 0.55, -s * 0.1,   // control 1: pull up-left
+     s * 0.0,  -s * 0.1,   // control 2: center
+     s * 0.0,  -s * 0.1    // end: center
+  );
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -435,6 +485,8 @@ export default function Game() {
     suiPulse: 0,
     suiShake: { x: 0, y: 0, timer: 0 },
     paused: false,
+    mouseDownTime: null,
+    chargeProgress: 0,
   });
   const animFrameRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
@@ -460,11 +512,13 @@ export default function Game() {
       suiPulse: 0,
       suiShake: { x: 0, y: 0, timer: 0 },
       paused: false,
+      mouseDownTime: null,
+      chargeProgress: 0,
     };
   }, []);
 
-  // ── Fire wave attack ──────────────────────────────────────────────────────
-  const fireWave = useCallback((mx: number, my: number, strong: boolean) => {
+  // ── Fire wave attack — always from SUI center ─────────────────────────────
+  const fireWave = useCallback((strong: boolean) => {
     const state = stateRef.current;
     const cost = strong ? 30 : 10;
     if (state.score < cost) return; // not enough SUI
@@ -472,22 +526,28 @@ export default function Game() {
     state.score -= cost;
     playShootSound(strong);
 
-    const maxRadius = strong ? 160 : 90;
+    const maxRadius = strong ? Math.max(WIDTH, HEIGHT) * 0.85 : 220;
     state.waves.push({
       id: state.nextWaveId++,
-      x: mx,
-      y: my,
-      radius: 0,
+      radius: SUI_RADIUS + 5, // start just outside SUI coin
       maxRadius,
       alpha: 1,
       strong,
     });
   }, []);
 
-  // ── Click handler ─────────────────────────────────────────────────────────
-  const handleClick = useCallback((e: MouseEvent) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // ── Mouse down: start charge timer ───────────────────────────────────────
+  const handleMouseDown = useCallback((e: MouseEvent) => {
+    if (e.button !== 0) return; // only left button
+    const phase = gamePhaseRef.current;
+    if (phase !== "playing") return;
+    stateRef.current.mouseDownTime = performance.now();
+    stateRef.current.chargeProgress = 0;
+  }, []);
+
+  // ── Mouse up: fire wave based on hold duration ────────────────────────────
+  const handleMouseUp = useCallback((e: MouseEvent) => {
+    if (e.button !== 0) return; // only left button
     const phase = gamePhaseRef.current;
 
     if (phase === "gameover") {
@@ -499,29 +559,21 @@ export default function Game() {
     }
     if (phase !== "playing") return;
 
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = WIDTH / rect.width;
-    const scaleY = HEIGHT / rect.height;
-    const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top) * scaleY;
+    const state = stateRef.current;
+    if (state.mouseDownTime === null) return;
 
-    const strong = e.button === 2; // right click = strong
-    fireWave(mx, my, strong);
+    const held = performance.now() - state.mouseDownTime;
+    const strong = held >= HOLD_THRESHOLD_MS;
+    state.mouseDownTime = null;
+    state.chargeProgress = 0;
+
+    fireWave(strong);
   }, [fireWave, resetState]);
 
+  // ── Context menu: prevent default ────────────────────────────────────────
   const handleContextMenu = useCallback((e: MouseEvent) => {
     e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    if (gamePhaseRef.current !== "playing") return;
-
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = WIDTH / rect.width;
-    const scaleY = HEIGHT / rect.height;
-    const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top) * scaleY;
-    fireWave(mx, my, true);
-  }, [fireWave]);
+  }, []);
 
   // ── Pause toggle ──────────────────────────────────────────────────────────
   const togglePause = useCallback(() => {
@@ -530,6 +582,8 @@ export default function Game() {
       gamePhaseRef.current = "paused";
       setGamePhase("paused");
       stateRef.current.paused = true;
+      stateRef.current.mouseDownTime = null; // cancel any charge
+      stateRef.current.chargeProgress = 0;
       pauseMusic();
     } else if (phase === "paused") {
       gamePhaseRef.current = "playing";
@@ -561,7 +615,8 @@ export default function Game() {
     };
 
     canvas.addEventListener("mousemove", handleMouseMove);
-    canvas.addEventListener("click", handleClick);
+    canvas.addEventListener("mousedown", handleMouseDown);
+    canvas.addEventListener("mouseup", handleMouseUp);
     canvas.addEventListener("contextmenu", handleContextMenu);
 
     // ── Draw functions ──────────────────────────────────────────────────────
@@ -599,7 +654,7 @@ export default function Game() {
       }
     };
 
-    const drawSUI = (ctx: CanvasRenderingContext2D, state: GameState, t: number) => {
+    const drawSUI = (ctx: CanvasRenderingContext2D, state: GameState) => {
       state.suiPulse += 0.04;
       const pulse = Math.sin(state.suiPulse) * 4;
       const cx = CENTER_X + state.suiShake.x;
@@ -620,6 +675,25 @@ export default function Game() {
       const hpR = Math.round(255 * (1 - hpFrac));
       const hpG = Math.round(200 * hpFrac);
       const hpGlowColor = `rgb(${hpR},${hpG},255)`;
+
+      // Charge ring — shows hold progress
+      if (state.mouseDownTime !== null) {
+        const held = performance.now() - state.mouseDownTime;
+        const progress = Math.min(held / HOLD_THRESHOLD_MS, 1);
+        state.chargeProgress = progress;
+
+        const chargeRadius = SUI_RADIUS + 28 + pulse;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, chargeRadius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+        ctx.strokeStyle = progress >= 1 ? "#ff8800" : "#00ffcc";
+        ctx.lineWidth = 4;
+        ctx.shadowColor = progress >= 1 ? "#ff8800" : "#00ffcc";
+        ctx.shadowBlur = 16;
+        ctx.globalAlpha = 0.9;
+        ctx.stroke();
+        ctx.restore();
+      }
 
       for (let ring = 3; ring >= 1; ring--) {
         const ringR = SUI_RADIUS + pulse + ring * 14;
@@ -657,30 +731,10 @@ export default function Game() {
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      // SUI logo
+      // SUI logo — official shape
       ctx.save();
       ctx.translate(cx, cy);
-      const s = SUI_RADIUS * 0.52;
-      ctx.shadowColor = "#ffffff";
-      ctx.shadowBlur = 8;
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 3.5;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-
-      ctx.beginPath();
-      ctx.moveTo(-s * 0.5, -s * 0.7);
-      ctx.bezierCurveTo(-s * 0.9, -s * 0.3, -s * 0.9, s * 0.1, 0, s * 0.1);
-      ctx.bezierCurveTo(s * 0.9, s * 0.1, s * 0.9, s * 0.5, s * 0.5, s * 0.9);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(s * 0.5, -s * 0.9);
-      ctx.bezierCurveTo(s * 0.9, -s * 0.5, s * 0.9, -s * 0.1, 0, -s * 0.1);
-      ctx.bezierCurveTo(-s * 0.9, -s * 0.1, -s * 0.9, s * 0.3, -s * 0.5, s * 0.7);
-      ctx.stroke();
-
-      ctx.shadowBlur = 0;
+      drawSUILogo(ctx, SUI_RADIUS);
       ctx.restore();
 
       // Shine
@@ -700,9 +754,6 @@ export default function Game() {
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.fillText("SUI", cx, cy + SUI_RADIUS + 6);
-
-      // Suppress unused variable warning
-      void t;
     };
 
     const drawMeteor = (ctx: CanvasRenderingContext2D, m: Meteor) => {
@@ -747,7 +798,7 @@ export default function Game() {
     const drawWaves = (ctx: CanvasRenderingContext2D, state: GameState) => {
       for (let i = state.waves.length - 1; i >= 0; i--) {
         const w = state.waves[i];
-        const expandSpeed = w.strong ? 7 : 5;
+        const expandSpeed = w.strong ? 9 : 6;
         w.radius += expandSpeed;
         w.alpha = 1 - w.radius / w.maxRadius;
 
@@ -756,14 +807,14 @@ export default function Game() {
           continue;
         }
 
-        // Check meteor hits within wave radius
+        // Check meteor hits — wave ring expands from SUI center
         for (let j = state.meteors.length - 1; j >= 0; j--) {
           const m = state.meteors[j];
-          const dx = m.x - w.x;
-          const dy = m.y - w.y;
+          const dx = m.x - CENTER_X;
+          const dy = m.y - CENTER_Y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          // Wave ring hits meteor if meteor is within the ring band
-          const ringThickness = w.strong ? 22 : 14;
+          // Wave ring hits meteor if meteor center is within the ring band
+          const ringThickness = w.strong ? 28 : 18;
           if (Math.abs(dist - w.radius) < ringThickness + m.radius) {
             const coinColor = COIN_COLORS[m.type].primary;
             createExplosion(state.particles, m.x, m.y, coinColor, 22);
@@ -776,21 +827,21 @@ export default function Game() {
           }
         }
 
-        // Draw wave ring
+        // Draw wave ring from SUI center
         ctx.save();
         ctx.beginPath();
-        ctx.arc(w.x, w.y, w.radius, 0, Math.PI * 2);
+        ctx.arc(CENTER_X, CENTER_Y, w.radius, 0, Math.PI * 2);
         const waveColor = w.strong ? "#ff8800" : "#00ffcc";
         ctx.strokeStyle = waveColor;
-        ctx.lineWidth = w.strong ? 4 : 2.5;
+        ctx.lineWidth = w.strong ? 5 : 3;
         ctx.globalAlpha = w.alpha * 0.9;
         ctx.shadowColor = waveColor;
-        ctx.shadowBlur = w.strong ? 20 : 12;
+        ctx.shadowBlur = w.strong ? 24 : 14;
         ctx.stroke();
 
         // Inner glow ring
         ctx.beginPath();
-        ctx.arc(w.x, w.y, w.radius * 0.85, 0, Math.PI * 2);
+        ctx.arc(CENTER_X, CENTER_Y, Math.max(0, w.radius - (w.strong ? 12 : 8)), 0, Math.PI * 2);
         ctx.strokeStyle = waveColor;
         ctx.lineWidth = 1;
         ctx.globalAlpha = w.alpha * 0.3;
@@ -800,14 +851,19 @@ export default function Game() {
       }
     };
 
-    const drawCrosshair = (ctx: CanvasRenderingContext2D, mx: number, my: number) => {
+    const drawCrosshair = (ctx: CanvasRenderingContext2D, mx: number, my: number, charging: boolean, chargeProgress: number) => {
       const size = 18;
       const gap = 6;
       ctx.save();
-      ctx.strokeStyle = "#00ff88";
+
+      const color = charging
+        ? (chargeProgress >= 1 ? "#ff8800" : `rgba(${Math.round(255 * chargeProgress)},${Math.round(255 * (1 - chargeProgress * 0.5))},${Math.round(204 * (1 - chargeProgress))},0.9)`)
+        : "#00ff88";
+
+      ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
-      ctx.shadowColor = "#00ff88";
-      ctx.shadowBlur = 8;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = charging ? 14 : 8;
 
       ctx.beginPath();
       ctx.moveTo(mx - size - gap, my);
@@ -822,12 +878,12 @@ export default function Game() {
 
       ctx.beginPath();
       ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = "#00ff88";
+      ctx.fillStyle = color;
       ctx.fill();
 
       ctx.beginPath();
       ctx.arc(mx, my, size * 0.7, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(0,255,136,0.4)";
+      ctx.strokeStyle = color.replace("0.9", "0.4");
       ctx.lineWidth = 1;
       ctx.stroke();
 
@@ -935,7 +991,7 @@ export default function Game() {
       ctx.textAlign = "left";
       ctx.font = "11px monospace";
       ctx.fillStyle = "rgba(0,255,204,0.6)";
-      ctx.fillText("LMB: Wave (-10 SUI)  |  RMB: Strong Wave (-30 SUI)", 18, HEIGHT - 24);
+      ctx.fillText("Click: Wave (-10 SUI)  |  Hold 2s: Strong Wave (-30 SUI)", 18, HEIGHT - 24);
 
       ctx.restore();
     };
@@ -1044,7 +1100,7 @@ export default function Game() {
       }
 
       // Draw SUI coin
-      drawSUI(ctx, state, timestamp);
+      drawSUI(ctx, state);
 
       // Draw waves (and handle hit detection)
       if (phase === "playing") {
@@ -1054,7 +1110,7 @@ export default function Game() {
         for (const w of state.waves) {
           ctx.save();
           ctx.beginPath();
-          ctx.arc(w.x, w.y, w.radius, 0, Math.PI * 2);
+          ctx.arc(CENTER_X, CENTER_Y, w.radius, 0, Math.PI * 2);
           const waveColor = w.strong ? "#ff8800" : "#00ffcc";
           ctx.strokeStyle = waveColor;
           ctx.lineWidth = w.strong ? 4 : 2.5;
@@ -1077,7 +1133,8 @@ export default function Game() {
 
       // Draw crosshair
       if (phase === "playing" || phase === "paused") {
-        drawCrosshair(ctx, state.mouseX, state.mouseY);
+        const charging = state.mouseDownTime !== null;
+        drawCrosshair(ctx, state.mouseX, state.mouseY, charging, state.chargeProgress);
       }
 
       // Overlays
@@ -1102,12 +1159,13 @@ export default function Game() {
 
     return () => {
       canvas.removeEventListener("mousemove", handleMouseMove);
-      canvas.removeEventListener("click", handleClick);
+      canvas.removeEventListener("mousedown", handleMouseDown);
+      canvas.removeEventListener("mouseup", handleMouseUp);
       canvas.removeEventListener("contextmenu", handleContextMenu);
       window.removeEventListener("keydown", handleKeyDown);
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [handleClick, handleContextMenu, togglePause]);
+  }, [handleMouseDown, handleMouseUp, handleContextMenu, togglePause]);
 
   return (
     <div
@@ -1173,8 +1231,8 @@ export default function Game() {
                 textAlign: "center",
               }}
             >
-              <div>🖱️ <b>Left Click</b> — Wave attack <span style={{ color: "#00ffcc" }}>(-10 SUI)</span></div>
-              <div>🖱️ <b>Right Click</b> — Strong wave <span style={{ color: "#ff8800" }}>(-30 SUI)</span></div>
+              <div>🖱️ <b>Click</b> — Wave attack <span style={{ color: "#00ffcc" }}>(-10 SUI)</span></div>
+              <div>🖱️ <b>Hold 2s</b> — Strong wave <span style={{ color: "#ff8800" }}>(-30 SUI)</span></div>
               <div>⌨️ <b>P / Esc</b> — Pause</div>
               <div>💥 Each meteor hit = <span style={{ color: "#ff4466" }}>-10% HP</span></div>
             </div>
