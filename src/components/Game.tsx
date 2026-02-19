@@ -33,9 +33,16 @@ const COIN_COLORS: Record<string, { primary: string; secondary: string; text: st
     glow: "#9945FF",
     bg: "rgba(153,69,255,0.18)",
   },
+  PEPE: {
+    primary: "#00A86B",
+    secondary: "#008050",
+    text: "#ffffff",
+    glow: "#00A86B",
+    bg: "rgba(0,168,107,0.18)",
+  },
 };
 
-const COIN_TYPES = ["BTC", "ETH", "SOL"] as const;
+const COIN_TYPES = ["BTC", "ETH", "SOL", "PEPE"] as const;
 type CoinType = (typeof COIN_TYPES)[number];
 
 // Attack wave — originates from where the player clicks
@@ -301,7 +308,7 @@ function playShootSound(strong: boolean) {
 function playExplosionSound(coinType: CoinType) {
   try {
     const ctx = getAudioCtx();
-    const freqs: Record<CoinType, number> = { BTC: 200, ETH: 300, SOL: 400 };
+    const freqs: Record<CoinType, number> = { BTC: 200, ETH: 300, SOL: 400, PEPE: 250 };
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -350,9 +357,10 @@ function generateStars(): GameState["stars"] {
 
 // Speed multipliers per coin type — higher reward = faster = harder
 const COIN_SPEED: Record<CoinType, number> = {
-  BTC: 1.9, // fastest — worth most
-  ETH: 1.4, // medium
-  SOL: 1.0, // slowest — worth least
+  BTC: 2.8, // fastest — worth most
+  ETH: 2.2, // fast
+  SOL: 1.6, // medium
+  PEPE: 2.5, // fast — meme power!
 };
 
 // Score rewards per coin type
@@ -360,6 +368,7 @@ const COIN_SCORE: Record<CoinType, number> = {
   BTC: 50,
   ETH: 30,
   SOL: 20,
+  PEPE: 40,
 };
 
 function spawnMeteor(id: number): Meteor {
@@ -504,6 +513,56 @@ function drawSOLLogo(ctx: CanvasRenderingContext2D, r: number) {
     ctx.restore();
   });
 
+  ctx.restore();
+}
+
+/** Draw the PEPE logo — simple frog face */
+function drawPEPELogo(ctx: CanvasRenderingContext2D, r: number) {
+  ctx.save();
+  
+  // Eyes (two white circles with black pupils)
+  const eyeY = -r * 0.2;
+  const eyeSpacing = r * 0.35;
+  const eyeR = r * 0.22;
+  
+  // Left eye white
+  ctx.beginPath();
+  ctx.ellipse(-eyeSpacing, eyeY, eyeR, eyeR * 1.1, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.strokeStyle = "#005533";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  
+  // Left pupil
+  ctx.beginPath();
+  ctx.arc(-eyeSpacing, eyeY, eyeR * 0.45, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  
+  // Right eye white
+  ctx.beginPath();
+  ctx.ellipse(eyeSpacing, eyeY, eyeR, eyeR * 1.1, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.strokeStyle = "#005533";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  
+  // Right pupil
+  ctx.beginPath();
+  ctx.arc(eyeSpacing, eyeY, eyeR * 0.45, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  
+  // Mouth (smug smile)
+  ctx.beginPath();
+  ctx.arc(0, r * 0.25, r * 0.4, 0.1 * Math.PI, 0.9 * Math.PI);
+  ctx.strokeStyle = "#005533";
+  ctx.lineWidth = r * 0.08;
+  ctx.lineCap = "round";
+  ctx.stroke();
+  
   ctx.restore();
 }
 
@@ -903,8 +962,10 @@ export default function Game() {
         ctx.fillText("₿", 0, 0);
       } else if (m.type === "ETH") {
         drawETHLogo(ctx, m.radius);
-      } else {
+      } else if (m.type === "SOL") {
         drawSOLLogo(ctx, m.radius);
+      } else if (m.type === "PEPE") {
+        drawPEPELogo(ctx, m.radius);
       }
 
       ctx.restore();
@@ -1364,7 +1425,7 @@ export default function Game() {
               <div>⌨️ <b>P / Esc</b> — Pausar</div>
               <div>💥 Cada meteoro que acerta = <span style={{ color: "#ff4466" }}>-10% HP</span></div>
               <div style={{ marginTop: "6px", paddingTop: "6px", borderTop: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", fontSize: "12px" }}>
-                💰 BTC <span style={{ color: "#F7931A" }}>+50 pts</span> · ETH <span style={{ color: "#627EEA" }}>+30 pts</span> · SOL <span style={{ color: "#9945FF" }}>+20 pts</span>
+                💰 BTC <span style={{ color: "#F7931A" }}>+50</span> · ETH <span style={{ color: "#627EEA" }}>+30</span> · SOL <span style={{ color: "#9945FF" }}>+20</span> · PEPE <span style={{ color: "#00A86B" }}>+40</span>
               </div>
               <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>
                 Saldo inicial: <span style={{ color: "#ffd700" }}>100 SUI</span>
