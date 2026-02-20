@@ -634,7 +634,7 @@ export default function Game() {
     nextMeteorId: 0,
     nextWaveId: 0,
     spawnTimer: 0,
-    spawnInterval: 120,
+    spawnInterval: 80,
     gameOver: false,
     suiPulse: 0,
     suiShake: { x: 0, y: 0, timer: 0 },
@@ -661,7 +661,7 @@ export default function Game() {
       nextMeteorId: 0,
       nextWaveId: 0,
       spawnTimer: 0,
-      spawnInterval: 120,
+      spawnInterval: 80,
       gameOver: false,
       suiPulse: 0,
       suiShake: { x: 0, y: 0, timer: 0 },
@@ -1240,11 +1240,15 @@ export default function Game() {
       drawBackground(ctx, state, timestamp);
 
       if (phase === "playing") {
-        // Spawn meteors
+        // Spawn meteors — spawn 4-5 at a time
         state.spawnTimer++;
         if (state.spawnTimer >= state.spawnInterval) {
           state.spawnTimer = 0;
-          state.meteors.push(spawnMeteor(state.nextMeteorId++));
+          // Spawn 4-5 meteors at once
+          const count = 4 + Math.floor(Math.random() * 2); // 4 or 5
+          for (let i = 0; i < count; i++) {
+            state.meteors.push(spawnMeteor(state.nextMeteorId++));
+          }
           state.spawnInterval = Math.max(40, state.spawnInterval - 0.3);
         }
 
