@@ -89,25 +89,49 @@ interface ScorePopup {
   color?: string;
 }
 
+// Power-up types
+type PowerUpType = "shield" | "speed" | "multiplier" | "heal";
+interface PowerUp {
+  id: number;
+  type: PowerUpType;
+  x: number;
+  y: number;
+  radius: number;
+  pulse: number;
+}
+
+interface ActivePowerUp {
+  type: PowerUpType;
+  duration: number; // remaining time in frames
+}
+
 interface GameState {
   score: number;
+  highScore: number;
   hp: number; // 0–100
   meteors: Meteor[];
   particles: Particle[];
   scorePopups: ScorePopup[];
   waves: Wave[];
+  powerUps: PowerUp[];
+  activePowerUps: ActivePowerUp[];
   mouseX: number;
   mouseY: number;
   bgFlash: { color: string; alpha: number } | null;
   stars: { x: number; y: number; r: number; brightness: number; twinkle: number }[];
   nextMeteorId: number;
   nextWaveId: number;
+  nextPowerUpId: number;
   spawnTimer: number;
   spawnInterval: number;
+  powerUpTimer: number;
   gameOver: boolean;
   suiPulse: number;
   suiShake: { x: number; y: number; timer: number };
+  screenShake: { x: number; y: number; timer: number };
   paused: boolean;
+  combo: number;
+  comboTimer: number;
   // Hold-to-charge state
   mouseDownTime: number | null; // timestamp when mouse was pressed
   chargeProgress: number; // 0–1 visual charge indicator
@@ -337,6 +361,30 @@ function playHitSound() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.4);
+  } catch {}
+}
+
+function playPowerUpSound(type: PowerUpType) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    const freqs: Record<PowerUpType, number> = {
+      shield: 880,
+      speed: 660,
+      multiplier: 1100,
+      heal: 550,
+    };
+    osc.frequency.setValueAtTime(freqs[type], ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(freqs[type] * 1.5, ctx.currentTime + 0.1);
+    osc.frequency.exponentialRampToValueAtTime(freqs[type] * 2, ctx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
   } catch {}
 }
 
@@ -622,23 +670,31 @@ export default function Game() {
 
   const stateRef = useRef<GameState>({
     score: 100,
+    highScore: typeof window !== "undefined" ? parseInt(localStorage.getItem("suiDefenderHighScore") || "0") : 0,
     hp: 100,
     meteors: [],
     particles: [],
     scorePopups: [],
     waves: [],
+    powerUps: [],
+    activePowerUps: [],
     mouseX: CENTER_X,
     mouseY: CENTER_Y,
     bgFlash: null,
     stars: generateStars(),
     nextMeteorId: 0,
     nextWaveId: 0,
+    nextPowerUpId: 0,
     spawnTimer: 0,
     spawnInterval: 80,
+    powerUpTimer: 0,
     gameOver: false,
     suiPulse: 0,
     suiShake: { x: 0, y: 0, timer: 0 },
+    screenShake: { x: 0, y: 0, timer: 0 },
     paused: false,
+    combo: 0,
+    comboTimer: 0,
     mouseDownTime: null,
     chargeProgress: 0,
   });
@@ -647,25 +703,34 @@ export default function Game() {
 
   const resetState = useCallback(() => {
     const prev = stateRef.current;
+    const savedHighScore = typeof window !== "undefined" ? parseInt(localStorage.getItem("suiDefenderHighScore") || "0") : 0;
     stateRef.current = {
       score: 100,
+      highScore: savedHighScore,
       hp: 100,
       meteors: [],
       particles: [],
       scorePopups: [],
       waves: [],
+      powerUps: [],
+      activePowerUps: [],
       mouseX: prev.mouseX,
       mouseY: prev.mouseY,
       bgFlash: null,
       stars: generateStars(),
       nextMeteorId: 0,
       nextWaveId: 0,
+      nextPowerUpId: 0,
       spawnTimer: 0,
       spawnInterval: 80,
+      powerUpTimer: 0,
       gameOver: false,
       suiPulse: 0,
       suiShake: { x: 0, y: 0, timer: 0 },
+      screenShake: { x: 0, y: 0, timer: 0 },
       paused: false,
+      combo: 0,
+      comboTimer: 0,
       mouseDownTime: null,
       chargeProgress: 0,
     };
@@ -995,7 +1060,19 @@ export default function Game() {
             const coinColor = COIN_COLORS[m.type].primary;
             createExplosion(state.particles, m.x, m.y, coinColor, 22);
             state.bgFlash = { color: coinColor, alpha: 0.45 };
-            const points = COIN_SCORE[m.type];
+            state.screenShake = { x: 0, y: 0, timer: 6 };
+            
+            // Combo system
+            state.combo++;
+            state.comboTimer = 120; // 2 seconds to maintain combo
+            
+            // Calculate points with combo and multiplier
+            let points = COIN_SCORE[m.type];
+            const hasMultiplier = state.activePowerUps.some(p => p.type === "multiplier");
+            if (hasMultiplier) points *= 2;
+            const comboMultiplier = Math.min(state.combo, 10);
+            points = Math.floor(points * (1 + comboMultiplier * 0.1));
+            
             state.score += points;
             state.scorePopups.push({
               x: m.x,
@@ -1007,9 +1084,20 @@ export default function Game() {
             });
             playExplosionSound(m.type);
             state.meteors.splice(j, 1);
+            
+            // Heal power-up gives HP on kill
+            const hasHeal = state.activePowerUps.some(p => p.type === "heal");
+            if (hasHeal) {
+              state.hp = Math.min(100, state.hp + 2);
+            }
+            
             // Check for phase 1 completion (1500 points)
             if (state.score >= 1500) {
               state.gameOver = true;
+              if (state.score > state.highScore) {
+                state.highScore = state.score;
+                localStorage.setItem("suiDefenderHighScore", state.score.toString());
+              }
               gamePhaseRef.current = "phasecomplete";
               setGamePhase("phasecomplete");
               stopMusic();
@@ -1130,11 +1218,50 @@ export default function Game() {
       ctx.fillText(`$${state.score.toLocaleString()} SUI`, 18, 16);
       ctx.shadowBlur = 0;
 
+      // High score
+      if (state.highScore > 0) {
+        ctx.fillStyle = "rgba(255,215,0,0.5)";
+        ctx.font = "12px monospace";
+        ctx.fillText(`BEST: $${state.highScore.toLocaleString()}`, 18, 46);
+      }
+
+      // Combo display
+      if (state.combo > 1) {
+        ctx.fillStyle = state.combo >= 10 ? "#ff4466" : "#00ffcc";
+        ctx.font = "bold 18px monospace";
+        ctx.shadowColor = state.combo >= 10 ? "#ff4466" : "#00ffcc";
+        ctx.shadowBlur = 10;
+        ctx.fillText(`${state.combo}x COMBO!`, 18, 64);
+        ctx.shadowBlur = 0;
+      }
+
       // Title
       ctx.fillStyle = "rgba(0,200,255,0.85)";
       ctx.font = "bold 16px monospace";
       ctx.textAlign = "center";
       ctx.fillText("⚡ SUI DEFENDER ⚡", CENTER_X, 14);
+
+      // Active power-ups display
+      const activeY = 70;
+      state.activePowerUps.forEach((p, i) => {
+        const colors: Record<PowerUpType, string> = {
+          shield: "#00ffff",
+          speed: "#ffff00",
+          multiplier: "#ff00ff",
+          heal: "#00ff00",
+        };
+        const icons: Record<PowerUpType, string> = {
+          shield: "🛡️",
+          speed: "⚡",
+          multiplier: "×2",
+          heal: "❤️",
+        };
+        const remaining = Math.ceil(p.duration / 60);
+        ctx.fillStyle = colors[p.type];
+        ctx.font = "12px monospace";
+        ctx.textAlign = "left";
+        ctx.fillText(`${icons[p.type]} ${remaining}s`, 18, activeY + i * 18);
+      });
 
       // HP bar at top right
       const barW = 180;
@@ -1244,6 +1371,19 @@ export default function Game() {
       const state = stateRef.current;
       const phase = gamePhaseRef.current;
 
+      // Apply screen shake
+      if (state.screenShake.timer > 0) {
+        state.screenShake.timer--;
+        state.screenShake.x = (Math.random() - 0.5) * 10;
+        state.screenShake.y = (Math.random() - 0.5) * 10;
+      } else {
+        state.screenShake.x = 0;
+        state.screenShake.y = 0;
+      }
+
+      ctx.save();
+      ctx.translate(state.screenShake.x, state.screenShake.y);
+
       drawBackground(ctx, state, timestamp);
 
       if (phase === "playing") {
@@ -1259,6 +1399,62 @@ export default function Game() {
           state.spawnInterval = Math.max(40, state.spawnInterval - 0.3);
         }
 
+        // Spawn power-ups occasionally
+        state.powerUpTimer++;
+        if (state.powerUpTimer >= 300) { // Every ~5 seconds
+          state.powerUpTimer = 0;
+          if (Math.random() < 0.5 && state.powerUps.length < 2) {
+            const types: PowerUpType[] = ["shield", "speed", "multiplier", "heal"];
+            const type = types[Math.floor(Math.random() * types.length)];
+            // Spawn at random position away from center
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 150 + Math.random() * 200;
+            state.powerUps.push({
+              id: state.nextPowerUpId++,
+              type,
+              x: CENTER_X + Math.cos(angle) * dist,
+              y: CENTER_Y + Math.sin(angle) * dist,
+              radius: 18,
+              pulse: 0,
+            });
+          }
+        }
+
+        // Update power-ups (pulse animation and collection)
+        for (let i = state.powerUps.length - 1; i >= 0; i--) {
+          const p = state.powerUps[i];
+          p.pulse += 0.1;
+          // Check if player wave hits power-up
+          for (const w of state.waves) {
+            const dx = p.x - w.x;
+            const dy = p.y - w.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (Math.abs(dist - w.radius) < 20 + p.radius) {
+              // Collected!
+              state.activePowerUps.push({ type: p.type, duration: 600 }); // 10 seconds
+              state.powerUps.splice(i, 1);
+              playPowerUpSound(p.type);
+              break;
+            }
+          }
+        }
+
+        // Update active power-ups
+        for (let i = state.activePowerUps.length - 1; i >= 0; i--) {
+          state.activePowerUps[i].duration--;
+          if (state.activePowerUps[i].duration <= 0) {
+            state.activePowerUps.splice(i, 1);
+          }
+        }
+
+        // Update combo timer
+        if (state.comboTimer > 0) {
+          state.comboTimer--;
+          if (state.comboTimer <= 0) {
+            state.combo = 0;
+          }
+        }
+
         // Update meteors
         for (let i = state.meteors.length - 1; i >= 0; i--) {
           const m = state.meteors[i];
@@ -1269,14 +1465,30 @@ export default function Game() {
           const dx = m.x - CENTER_X;
           const dy = m.y - CENTER_Y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < SUI_RADIUS + m.radius - 10) {
+          
+          // Check for shield power-up
+          const hasShield = state.activePowerUps.some(p => p.type === "shield");
+          const shieldRadius = SUI_RADIUS + 30;
+          
+          if (hasShield && dist < shieldRadius + m.radius) {
+            // Shield blocks the meteor
+            createExplosion(state.particles, m.x, m.y, "#00ffff", 20);
+            state.meteors.splice(i, 1);
+            state.screenShake = { x: 0, y: 0, timer: 8 };
+          } else if (dist < SUI_RADIUS + m.radius - 10) {
             createExplosion(state.particles, m.x, m.y, COIN_COLORS[m.type].primary, 14);
             state.meteors.splice(i, 1);
             state.hp = Math.max(0, state.hp - 10);
             state.suiShake = { x: 0, y: 0, timer: 20 };
+            state.screenShake = { x: 0, y: 0, timer: 15 };
             playHitSound();
             if (state.hp <= 0) {
               state.gameOver = true;
+              // Save high score
+              if (state.score > state.highScore) {
+                state.highScore = state.score;
+                localStorage.setItem("suiDefenderHighScore", state.score.toString());
+              }
               gamePhaseRef.current = "gameover";
               setGamePhase("gameover");
               stopMusic();
@@ -1311,6 +1523,62 @@ export default function Game() {
         }
       }
 
+      // Draw power-ups
+      for (const p of state.powerUps) {
+        const colors: Record<PowerUpType, string> = {
+          shield: "#00ffff",
+          speed: "#ffff00",
+          multiplier: "#ff00ff",
+          heal: "#00ff00",
+        };
+        const icons: Record<PowerUpType, string> = {
+          shield: "🛡",
+          speed: "⚡",
+          multiplier: "×2",
+          heal: "❤",
+        };
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        
+        // Glow
+        ctx.shadowColor = colors[p.type];
+        ctx.shadowBlur = 15 + Math.sin(p.pulse) * 5;
+        
+        // Circle
+        ctx.beginPath();
+        ctx.arc(0, 0, p.radius + Math.sin(p.pulse) * 3, 0, Math.PI * 2);
+        ctx.fillStyle = colors[p.type] + "40";
+        ctx.fill();
+        ctx.strokeStyle = colors[p.type];
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Icon
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 16px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(icons[p.type], 0, 0);
+        
+        ctx.restore();
+      }
+
+      // Draw shield effect if active
+      const hasShield = state.activePowerUps.some(p => p.type === "shield");
+      if (hasShield) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(CENTER_X, CENTER_Y, SUI_RADIUS + 30, 0, Math.PI * 2);
+        ctx.strokeStyle = "#00ffff";
+        ctx.lineWidth = 3;
+        ctx.shadowColor = "#00ffff";
+        ctx.shadowBlur = 20;
+        ctx.globalAlpha = 0.5 + Math.sin(Date.now() * 0.005) * 0.2;
+        ctx.stroke();
+        ctx.restore();
+      }
+
       // Draw particles
       drawParticles(ctx, state.particles);
 
@@ -1334,6 +1602,8 @@ export default function Game() {
       } else if (phase === "gameover") {
         drawGameOver(ctx, state);
       }
+
+      ctx.restore(); // Restore from screen shake transform
 
       animFrameRef.current = requestAnimationFrame(gameLoop);
     };
