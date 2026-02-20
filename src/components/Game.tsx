@@ -533,8 +533,8 @@ function spawnBoss(id: number, bossType: BossType): Boss {
     vx: 0,
     vy: 0.5,
     radius: isPhase1 ? 60 : 75,
-    hp: isPhase1 ? 300 : 600,
-    maxHp: isPhase1 ? 300 : 600,
+    hp: isPhase1 ? 1000 : 2000, // Much higher HP - requires many attacks to defeat
+    maxHp: isPhase1 ? 1000 : 2000,
     rotation: 0,
     rotSpeed: isPhase1 ? 0.008 : 0.012,
     attackTimer: 0,
@@ -2166,7 +2166,7 @@ export default function Game() {
               if (boss.hp <= 0) {
                 // Boss defeated!
                 state.bossDefeated = true;
-                const bonus = boss.type === "PEPE_KING" ? 300 : 600;
+                const bonus = boss.type === "PEPE_KING" ? 500 : 1000; // Higher bonus for tougher boss
                 state.score += bonus;
                 createExplosion(state.particles, boss.x, boss.y, bossColor, 100);
                 state.bgFlash = { color: bossColor, alpha: 0.8 };
@@ -2188,32 +2188,52 @@ export default function Game() {
       if (state.boss && !state.bossDefeated) {
         drawBoss(ctx, state.boss);
         
-        // Boss HP bar
-        const barW = 300;
-        const barH = 20;
+        // Boss HP bar - larger and more prominent
+        const barW = 400;
+        const barH = 28;
         const barX = CENTER_X - barW / 2;
-        const barY = HEIGHT - 50;
+        const barY = HEIGHT - 60;
         
         // Boss colors based on type
         const bossColor = state.boss.type === "PEPE_KING" ? "#00FF88" : "#FF6B35";
         const bossColor2 = state.boss.type === "PEPE_KING" ? "#00A86B" : "#FFA500";
         const bossName = state.boss.type === "PEPE_KING" ? "👑 PEPE KING" : "🔥 BONK BOSS";
         
-        // Background
-        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        // Background with glow
+        ctx.shadowColor = bossColor;
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
         ctx.beginPath();
-        ctx.roundRect(barX - 5, barY - 5, barW + 10, barH + 10, 6);
+        ctx.roundRect(barX - 8, barY - 25, barW + 16, barH + 35, 8);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        // Boss name
+        ctx.fillStyle = bossColor;
+        ctx.font = "bold 16px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(bossName, CENTER_X, barY - 20);
+        
+        // HP bar background
+        ctx.fillStyle = "rgba(50,50,50,0.8)";
+        ctx.beginPath();
+        ctx.roundRect(barX, barY, barW, barH, 4);
         ctx.fill();
         
-        // HP bar
+        // HP bar fill with gradient
         const hpFrac = state.boss.hp / state.boss.maxHp;
         const hpGrad = ctx.createLinearGradient(barX, 0, barX + barW * hpFrac, 0);
         hpGrad.addColorStop(0, bossColor);
-        hpGrad.addColorStop(1, bossColor2);
+        hpGrad.addColorStop(0.5, bossColor2);
+        hpGrad.addColorStop(1, bossColor);
         ctx.fillStyle = hpGrad;
+        ctx.shadowColor = bossColor;
+        ctx.shadowBlur = 10;
         ctx.beginPath();
         ctx.roundRect(barX, barY, barW * hpFrac, barH, 4);
         ctx.fill();
+        ctx.shadowBlur = 0;
         
         // Border
         ctx.strokeStyle = bossColor;
@@ -2222,12 +2242,17 @@ export default function Game() {
         ctx.roundRect(barX, barY, barW, barH, 4);
         ctx.stroke();
         
-        // Label
+        // HP text - show actual numbers
         ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 12px monospace";
+        ctx.font = "bold 14px monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(`${bossName}: ${state.boss.hp}/${state.boss.maxHp}`, CENTER_X, barY + barH / 2);
+        ctx.fillText(`${state.boss.hp} / ${state.boss.maxHp} HP`, CENTER_X, barY + barH / 2);
+        
+        // Damage indicator (how much damage each attack does)
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.font = "10px monospace";
+        ctx.fillText("Simple: -10 HP  |  Strong: -25 HP", CENTER_X, barY + barH + 8);
       }
 
       // Draw SUI coin
@@ -2508,14 +2533,14 @@ export default function Game() {
           </div>
         )}
 
-        {/* Pause button (visible during play) */}
+        {/* Pause button (visible during play) - moved to bottom left to avoid HP bar overlap */}
         {(gamePhase === "playing" || gamePhase === "paused") && (
           <button
             onClick={togglePause}
             style={{
               position: "absolute",
-              top: "12px",
-              right: "12px",
+              bottom: "12px",
+              left: "12px",
               padding: "6px 14px",
               fontSize: "13px",
               fontWeight: "bold",
