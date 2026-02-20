@@ -40,10 +40,44 @@ const COIN_COLORS: Record<string, { primary: string; secondary: string; text: st
     glow: "#00A86B",
     bg: "rgba(0,168,107,0.18)",
   },
+  // Phase 2 meme coins
+  DOGE: {
+    primary: "#C2A633",
+    secondary: "#9E8A2A",
+    text: "#ffffff",
+    glow: "#C2A633",
+    bg: "rgba(194,166,51,0.18)",
+  },
+  SHIB: {
+    primary: "#FFA409",
+    secondary: "#CC8200",
+    text: "#ffffff",
+    glow: "#FFA409",
+    bg: "rgba(255,164,9,0.18)",
+  },
+  BONK: {
+    primary: "#FF6B35",
+    secondary: "#CC5529",
+    text: "#ffffff",
+    glow: "#FF6B35",
+    bg: "rgba(255,107,53,0.18)",
+  },
+  WIF: {
+    primary: "#A855F7",
+    secondary: "#7C3AED",
+    text: "#ffffff",
+    glow: "#A855F7",
+    bg: "rgba(168,85,247,0.18)",
+  },
 };
 
-const COIN_TYPES = ["BTC", "ETH", "SOL", "PEPE"] as const;
-type CoinType = (typeof COIN_TYPES)[number];
+// Phase 1 coins
+const COIN_TYPES_PHASE1 = ["BTC", "ETH", "SOL", "PEPE"] as const;
+// Phase 2 coins (meme coins - faster and more aggressive)
+const COIN_TYPES_PHASE2 = ["DOGE", "SHIB", "BONK", "WIF"] as const;
+type CoinTypePhase1 = (typeof COIN_TYPES_PHASE1)[number];
+type CoinTypePhase2 = (typeof COIN_TYPES_PHASE2)[number];
+type CoinType = CoinTypePhase1 | CoinTypePhase2;
 
 // Attack wave — originates from where the player clicks
 interface Wave {
@@ -105,6 +139,23 @@ interface ActivePowerUp {
   duration: number; // remaining time in frames
 }
 
+// Boss enemy for Phase 2
+interface Boss {
+  id: number;
+  type: "DOGE_BOSS";
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  hp: number;
+  maxHp: number;
+  rotation: number;
+  rotSpeed: number;
+  attackTimer: number;
+  phase: number; // boss attack phase
+}
+
 interface GameState {
   score: number;
   highScore: number;
@@ -135,6 +186,10 @@ interface GameState {
   // Hold-to-charge state
   mouseDownTime: number | null; // timestamp when mouse was pressed
   chargeProgress: number; // 0–1 visual charge indicator
+  // Phase system
+  currentPhase: 1 | 2;
+  boss: Boss | null;
+  bossDefeated: boolean;
 }
 
 // ─── Web Audio ────────────────────────────────────────────────────────────────
@@ -334,7 +389,10 @@ function playShootSound(strong: boolean) {
 function playExplosionSound(coinType: CoinType) {
   try {
     const ctx = getAudioCtx();
-    const freqs: Record<CoinType, number> = { BTC: 200, ETH: 300, SOL: 400, PEPE: 250 };
+    const freqs: Record<CoinType, number> = { 
+      BTC: 200, ETH: 300, SOL: 400, PEPE: 250,
+      DOGE: 180, SHIB: 220, BONK: 280, WIF: 160 
+    };
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -411,6 +469,11 @@ const COIN_SPEED: Record<CoinType, number> = {
   ETH: 2.2, // fast
   SOL: 1.6, // medium
   PEPE: 2.5, // fast — meme power!
+  // Phase 2 meme coins - faster and more aggressive
+  DOGE: 3.2, // very fast
+  SHIB: 3.5, // extremely fast
+  BONK: 3.0, // fast
+  WIF: 3.8, // fastest meme coin
 };
 
 // Score rewards per coin type
@@ -419,10 +482,16 @@ const COIN_SCORE: Record<CoinType, number> = {
   ETH: 30,
   SOL: 20,
   PEPE: 40,
+  // Phase 2 meme coins - higher rewards
+  DOGE: 60,
+  SHIB: 70,
+  BONK: 55,
+  WIF: 80,
 };
 
-function spawnMeteor(id: number): Meteor {
-  const type = COIN_TYPES[Math.floor(Math.random() * COIN_TYPES.length)];
+function spawnMeteor(id: number, phase: 1 | 2): Meteor {
+  const types = phase === 1 ? COIN_TYPES_PHASE1 : COIN_TYPES_PHASE2;
+  const type = types[Math.floor(Math.random() * types.length)];
   const radius = 22 + Math.random() * 14;
   const side = Math.floor(Math.random() * 4);
   let x = 0, y = 0;
@@ -447,6 +516,25 @@ function spawnMeteor(id: number): Meteor {
     rotation: Math.random() * Math.PI * 2,
     rotSpeed: (Math.random() - 0.5) * 0.06,
     hp: 1,
+  };
+}
+
+// Spawn boss for Phase 2
+function spawnBoss(id: number): Boss {
+  return {
+    id,
+    type: "DOGE_BOSS",
+    x: WIDTH / 2,
+    y: -80,
+    vx: 0,
+    vy: 0.5,
+    radius: 70,
+    hp: 500,
+    maxHp: 500,
+    rotation: 0,
+    rotSpeed: 0.01,
+    attackTimer: 0,
+    phase: 1,
   };
 }
 
@@ -664,11 +752,271 @@ function drawSUILogo(ctx: CanvasRenderingContext2D, r: number) {
   ctx.restore();
 }
 
+/** Draw DOGE logo — Shiba Inu face simplified */
+function drawDOGELogo(ctx: CanvasRenderingContext2D, r: number) {
+  ctx.save();
+  
+  // Simple doge face - two eyes and a nose
+  const eyeY = -r * 0.15;
+  const eyeSpacing = r * 0.35;
+  const eyeR = r * 0.18;
+  
+  // Left eye
+  ctx.beginPath();
+  ctx.ellipse(-eyeSpacing, eyeY, eyeR, eyeR * 1.2, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(-eyeSpacing, eyeY, eyeR * 0.5, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  
+  // Right eye
+  ctx.beginPath();
+  ctx.ellipse(eyeSpacing, eyeY, eyeR, eyeR * 1.2, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(eyeSpacing, eyeY, eyeR * 0.5, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  
+  // Nose
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.25, r * 0.15, r * 0.1, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#333333";
+  ctx.fill();
+  
+  // Smile
+  ctx.beginPath();
+  ctx.arc(0, r * 0.3, r * 0.3, 0.2 * Math.PI, 0.8 * Math.PI);
+  ctx.strokeStyle = "#333333";
+  ctx.lineWidth = r * 0.06;
+  ctx.lineCap = "round";
+  ctx.stroke();
+  
+  ctx.restore();
+}
+
+/** Draw SHIB logo — similar to DOGE but with different colors */
+function drawSHIBLogo(ctx: CanvasRenderingContext2D, r: number) {
+  ctx.save();
+  
+  // Shiba face - more aggressive look
+  const eyeY = -r * 0.2;
+  const eyeSpacing = r * 0.32;
+  const eyeR = r * 0.16;
+  
+  // Left eye (angled)
+  ctx.save();
+  ctx.translate(-eyeSpacing, eyeY);
+  ctx.rotate(-0.2);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, eyeR, eyeR * 0.8, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, 0, eyeR * 0.5, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  ctx.restore();
+  
+  // Right eye (angled)
+  ctx.save();
+  ctx.translate(eyeSpacing, eyeY);
+  ctx.rotate(0.2);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, eyeR, eyeR * 0.8, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, 0, eyeR * 0.5, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  ctx.restore();
+  
+  // Nose
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.2, r * 0.12, r * 0.08, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#222222";
+  ctx.fill();
+  
+  ctx.restore();
+}
+
+/** Draw BONK logo — stylized "B" with lightning */
+function drawBONKLogo(ctx: CanvasRenderingContext2D, r: number) {
+  ctx.save();
+  
+  // Lightning bolt shape
+  ctx.beginPath();
+  ctx.moveTo(r * 0.1, -r * 0.7);
+  ctx.lineTo(-r * 0.3, 0);
+  ctx.lineTo(r * 0.0, 0);
+  ctx.lineTo(-r * 0.1, r * 0.7);
+  ctx.lineTo(r * 0.3, 0);
+  ctx.lineTo(r * 0.0, 0);
+  ctx.closePath();
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  
+  ctx.restore();
+}
+
+/** Draw WIF logo — dog with hat */
+function drawWIFLogo(ctx: CanvasRenderingContext2D, r: number) {
+  ctx.save();
+  
+  // Simple dog face with hat
+  const hatTop = -r * 0.6;
+  
+  // Hat
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.5, -r * 0.3);
+  ctx.lineTo(0, hatTop - r * 0.2);
+  ctx.lineTo(r * 0.5, -r * 0.3);
+  ctx.closePath();
+  ctx.fillStyle = "#ff0000";
+  ctx.fill();
+  
+  // Hat brim
+  ctx.beginPath();
+  ctx.ellipse(0, -r * 0.3, r * 0.55, r * 0.12, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#ff0000";
+  ctx.fill();
+  
+  // Eyes
+  const eyeY = r * 0.0;
+  const eyeSpacing = r * 0.28;
+  
+  ctx.beginPath();
+  ctx.arc(-eyeSpacing, eyeY, r * 0.12, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  
+  ctx.beginPath();
+  ctx.arc(eyeSpacing, eyeY, r * 0.12, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  
+  // Nose
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.25, r * 0.1, r * 0.07, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#333333";
+  ctx.fill();
+  
+  ctx.restore();
+}
+
+/** Draw Boss DOGE — giant Shiba with crown */
+function drawBossDOGE(ctx: CanvasRenderingContext2D, boss: Boss) {
+  const r = boss.radius;
+  ctx.save();
+  ctx.translate(boss.x, boss.y);
+  ctx.rotate(boss.rotation);
+  
+  // Glow effect
+  ctx.shadowColor = "#C2A633";
+  ctx.shadowBlur = 40;
+  
+  // Main body
+  const grad = ctx.createRadialGradient(-r * 0.2, -r * 0.2, r * 0.1, 0, 0, r);
+  grad.addColorStop(0, "#FFD700");
+  grad.addColorStop(0.5, "#C2A633");
+  grad.addColorStop(1, "#8B7500");
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = "#FFD700";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  
+  ctx.shadowBlur = 0;
+  
+  // Crown
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.6, -r * 0.5);
+  ctx.lineTo(-r * 0.4, -r * 0.9);
+  ctx.lineTo(-r * 0.2, -r * 0.6);
+  ctx.lineTo(0, -r * 1.0);
+  ctx.lineTo(r * 0.2, -r * 0.6);
+  ctx.lineTo(r * 0.4, -r * 0.9);
+  ctx.lineTo(r * 0.6, -r * 0.5);
+  ctx.closePath();
+  ctx.fillStyle = "#FFD700";
+  ctx.fill();
+  ctx.strokeStyle = "#FFA500";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  
+  // Eyes (angry)
+  const eyeY = -r * 0.1;
+  const eyeSpacing = r * 0.35;
+  
+  // Left eye
+  ctx.beginPath();
+  ctx.ellipse(-eyeSpacing, eyeY, r * 0.18, r * 0.22, -0.2, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(-eyeSpacing, eyeY, r * 0.1, 0, Math.PI * 2);
+  ctx.fillStyle = "#ff0000";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(-eyeSpacing, eyeY, r * 0.05, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  
+  // Right eye
+  ctx.beginPath();
+  ctx.ellipse(eyeSpacing, eyeY, r * 0.18, r * 0.22, 0.2, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(eyeSpacing, eyeY, r * 0.1, 0, Math.PI * 2);
+  ctx.fillStyle = "#ff0000";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(eyeSpacing, eyeY, r * 0.05, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  
+  // Angry eyebrows
+  ctx.strokeStyle = "#8B4513";
+  ctx.lineWidth = r * 0.06;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-eyeSpacing - r * 0.2, eyeY - r * 0.35);
+  ctx.lineTo(-eyeSpacing + r * 0.15, eyeY - r * 0.25);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(eyeSpacing + r * 0.2, eyeY - r * 0.35);
+  ctx.lineTo(eyeSpacing - r * 0.15, eyeY - r * 0.25);
+  ctx.stroke();
+  
+  // Nose
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.2, r * 0.12, r * 0.08, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#333333";
+  ctx.fill();
+  
+  // Menacing smile
+  ctx.beginPath();
+  ctx.arc(0, r * 0.35, r * 0.35, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.strokeStyle = "#333333";
+  ctx.lineWidth = r * 0.05;
+  ctx.stroke();
+  
+  ctx.restore();
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gamePhase, setGamePhase] = useState<"start" | "playing" | "paused" | "gameover" | "phasecomplete">("start");
   const gamePhaseRef = useRef<"start" | "playing" | "paused" | "gameover" | "phasecomplete">("start");
+  const [finalScore, setFinalScore] = useState(0);
 
   const stateRef = useRef<GameState>({
     score: 100,
@@ -699,6 +1047,9 @@ export default function Game() {
     comboTimer: 0,
     mouseDownTime: null,
     chargeProgress: 0,
+    currentPhase: 1,
+    boss: null,
+    bossDefeated: false,
   });
   const animFrameRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
@@ -735,6 +1086,9 @@ export default function Game() {
       comboTimer: 0,
       mouseDownTime: null,
       chargeProgress: 0,
+      currentPhase: 1,
+      boss: null,
+      bossDefeated: false,
     };
   }, []);
 
@@ -863,28 +1217,68 @@ export default function Game() {
     // ── Draw functions ──────────────────────────────────────────────────────
 
     const drawBackground = (ctx: CanvasRenderingContext2D, state: GameState, t: number) => {
-      const bg = ctx.createRadialGradient(CENTER_X, CENTER_Y, 80, CENTER_X, CENTER_Y, WIDTH * 0.8);
-      bg.addColorStop(0, "#0a0e1a");
-      bg.addColorStop(0.5, "#060a14");
-      bg.addColorStop(1, "#020408");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      // Different background for each phase
+      if (state.currentPhase === 1) {
+        // Phase 1: Blue space theme
+        const bg = ctx.createRadialGradient(CENTER_X, CENTER_Y, 80, CENTER_X, CENTER_Y, WIDTH * 0.8);
+        bg.addColorStop(0, "#0a0e1a");
+        bg.addColorStop(0.5, "#060a14");
+        bg.addColorStop(1, "#020408");
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      for (const star of state.stars) {
-        star.twinkle += 0.03;
-        const alpha = 0.4 + 0.6 * Math.abs(Math.sin(star.twinkle + t * 0.001));
-        ctx.beginPath();
-        ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${alpha * star.brightness})`;
-        ctx.fill();
+        for (const star of state.stars) {
+          star.twinkle += 0.03;
+          const alpha = 0.4 + 0.6 * Math.abs(Math.sin(star.twinkle + t * 0.001));
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255,255,255,${alpha * star.brightness})`;
+          ctx.fill();
+        }
+
+        const nebula = ctx.createRadialGradient(CENTER_X, CENTER_Y, 60, CENTER_X, CENTER_Y, 280);
+        nebula.addColorStop(0, "rgba(0,200,255,0.06)");
+        nebula.addColorStop(0.5, "rgba(100,50,200,0.04)");
+        nebula.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = nebula;
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      } else {
+        // Phase 2: Purple/gold nebula theme (more intense)
+        const bg = ctx.createRadialGradient(CENTER_X, CENTER_Y, 80, CENTER_X, CENTER_Y, WIDTH * 0.8);
+        bg.addColorStop(0, "#1a0a1e");
+        bg.addColorStop(0.5, "#0f0614");
+        bg.addColorStop(1, "#050208");
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+        for (const star of state.stars) {
+          star.twinkle += 0.05; // faster twinkle
+          const alpha = 0.5 + 0.5 * Math.abs(Math.sin(star.twinkle + t * 0.002));
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, star.r * 1.2, 0, Math.PI * 2);
+          // Golden/purple stars for phase 2
+          const hue = (star.x + star.y + t * 0.01) % 60 + 30; // gold to purple range
+          ctx.fillStyle = `hsla(${hue}, 80%, 70%, ${alpha * star.brightness})`;
+          ctx.fill();
+        }
+
+        // Intense nebula effect
+        const nebula = ctx.createRadialGradient(CENTER_X, CENTER_Y, 60, CENTER_X, CENTER_Y, 350);
+        nebula.addColorStop(0, "rgba(168,85,247,0.12)");
+        nebula.addColorStop(0.3, "rgba(255,165,0,0.08)");
+        nebula.addColorStop(0.6, "rgba(194,166,51,0.06)");
+        nebula.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = nebula;
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+        // Pulsing danger zone
+        const dangerPulse = Math.sin(t * 0.003) * 0.02 + 0.03;
+        const danger = ctx.createRadialGradient(CENTER_X, CENTER_Y, SUI_RADIUS + 50, CENTER_X, CENTER_Y, SUI_RADIUS + 150);
+        danger.addColorStop(0, `rgba(255,0,100,${dangerPulse})`);
+        danger.addColorStop(1, "rgba(255,0,100,0)");
+        ctx.fillStyle = danger;
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
       }
-
-      const nebula = ctx.createRadialGradient(CENTER_X, CENTER_Y, 60, CENTER_X, CENTER_Y, 280);
-      nebula.addColorStop(0, "rgba(0,200,255,0.06)");
-      nebula.addColorStop(0.5, "rgba(100,50,200,0.04)");
-      nebula.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = nebula;
-      ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
       if (state.bgFlash && state.bgFlash.alpha > 0) {
         const [r, g, b] = hexToRgb(state.bgFlash.color);
@@ -1033,6 +1427,14 @@ export default function Game() {
         drawSOLLogo(ctx, m.radius);
       } else if (m.type === "PEPE") {
         drawPEPELogo(ctx, m.radius);
+      } else if (m.type === "DOGE") {
+        drawDOGELogo(ctx, m.radius);
+      } else if (m.type === "SHIB") {
+        drawSHIBLogo(ctx, m.radius);
+      } else if (m.type === "BONK") {
+        drawBONKLogo(ctx, m.radius);
+      } else if (m.type === "WIF") {
+        drawWIFLogo(ctx, m.radius);
       }
 
       ctx.restore();
@@ -1094,12 +1496,22 @@ export default function Game() {
             }
             
             // Check for phase 1 completion (1500 points)
-            if (state.score >= 1500) {
+            if (state.score >= 1500 && state.currentPhase === 1) {
+              state.currentPhase = 2;
+              state.spawnInterval = 60; // faster spawns in phase 2
+              // Spawn the boss after a short delay
+              state.boss = spawnBoss(state.nextMeteorId++);
+              state.bgFlash = { color: "#FFD700", alpha: 0.5 };
+            }
+            
+            // Check for phase 2 completion (boss defeated + 3000 points)
+            if (state.currentPhase === 2 && state.bossDefeated && state.score >= 3000) {
               state.gameOver = true;
               if (state.score > state.highScore) {
                 state.highScore = state.score;
                 localStorage.setItem("suiDefenderHighScore", state.score.toString());
               }
+              setFinalScore(state.score);
               gamePhaseRef.current = "phasecomplete";
               setGamePhase("phasecomplete");
               stopMusic();
@@ -1227,21 +1639,41 @@ export default function Game() {
         ctx.fillText(`BEST: $${state.highScore.toLocaleString()}`, 18, 46);
       }
 
+      // Phase indicator
+      const phaseText = state.currentPhase === 1 ? "PHASE I" : "PHASE II: MEME WARS";
+      const phaseColor = state.currentPhase === 1 ? "#00c8ff" : "#FFD700";
+      ctx.fillStyle = phaseColor;
+      ctx.font = "bold 14px monospace";
+      ctx.textAlign = "right";
+      ctx.fillText(phaseText, WIDTH - 18, 46);
+      
+      // Phase 2 progress (if in phase 1, show progress to phase 2)
+      if (state.currentPhase === 1) {
+        const progress = Math.min(state.score / 1500, 1);
+        const barW = 100;
+        const barX = WIDTH - barW - 18;
+        ctx.fillStyle = "rgba(255,255,255,0.1)";
+        ctx.fillRect(barX, 62, barW, 6);
+        ctx.fillStyle = "#00ff88";
+        ctx.fillRect(barX, 62, barW * progress, 6);
+      }
+
       // Combo display
       if (state.combo > 1) {
         ctx.fillStyle = state.combo >= 10 ? "#ff4466" : "#00ffcc";
         ctx.font = "bold 18px monospace";
         ctx.shadowColor = state.combo >= 10 ? "#ff4466" : "#00ffcc";
         ctx.shadowBlur = 10;
+        ctx.textAlign = "left";
         ctx.fillText(`${state.combo}x COMBO!`, 18, 64);
         ctx.shadowBlur = 0;
       }
 
       // Title
-      ctx.fillStyle = "rgba(0,200,255,0.85)";
+      ctx.fillStyle = state.currentPhase === 1 ? "rgba(0,200,255,0.85)" : "rgba(255,215,0,0.85)";
       ctx.font = "bold 16px monospace";
       ctx.textAlign = "center";
-      ctx.fillText("⚡ SUI DEFENDER ⚡", CENTER_X, 14);
+      ctx.fillText(state.currentPhase === 1 ? "⚡ SUI DEFENDER ⚡" : "⚡ SUI DEFENDER: MEME WARS ⚡", CENTER_X, 14);
 
       // Active power-ups display
       const activeY = 70;
@@ -1389,16 +1821,18 @@ export default function Game() {
       drawBackground(ctx, state, timestamp);
 
       if (phase === "playing") {
-        // Spawn meteors — spawn 4-5 at a time
+        // Spawn meteors — spawn 4-5 at a time (more in phase 2)
         state.spawnTimer++;
         if (state.spawnTimer >= state.spawnInterval) {
           state.spawnTimer = 0;
-          // Spawn 4-5 meteors at once
-          const count = 4 + Math.floor(Math.random() * 2); // 4 or 5
+          // Spawn 4-5 meteors in phase 1, 5-7 in phase 2
+          const baseCount = state.currentPhase === 1 ? 4 : 5;
+          const extraCount = state.currentPhase === 1 ? 2 : 3;
+          const count = baseCount + Math.floor(Math.random() * extraCount);
           for (let i = 0; i < count; i++) {
-            state.meteors.push(spawnMeteor(state.nextMeteorId++));
+            state.meteors.push(spawnMeteor(state.nextMeteorId++, state.currentPhase));
           }
-          state.spawnInterval = Math.max(40, state.spawnInterval - 0.3);
+          state.spawnInterval = Math.max(state.currentPhase === 1 ? 40 : 30, state.spawnInterval - 0.3);
         }
 
         // Spawn power-ups occasionally
@@ -1497,11 +1931,122 @@ export default function Game() {
             }
           }
         }
+
+        // Update boss (Phase 2)
+        if (state.boss && !state.bossDefeated) {
+          const boss = state.boss;
+          boss.rotation += boss.rotSpeed;
+          boss.attackTimer++;
+          
+          // Boss movement - orbits around center
+          if (boss.y < 150) {
+            boss.y += boss.vy;
+          } else {
+            // Orbit pattern
+            const orbitSpeed = 0.008;
+            const orbitRadius = 200;
+            const angle = Date.now() * orbitSpeed;
+            boss.x = CENTER_X + Math.cos(angle) * orbitRadius;
+            boss.y = 150 + Math.sin(angle) * 50;
+          }
+          
+          // Boss spawns minions periodically
+          if (boss.attackTimer % 120 === 0) {
+            // Spawn 2-3 minions
+            const count = 2 + Math.floor(Math.random() * 2);
+            for (let i = 0; i < count; i++) {
+              const minion = spawnMeteor(state.nextMeteorId++, 2);
+              minion.x = boss.x + (Math.random() - 0.5) * 100;
+              minion.y = boss.y + (Math.random() - 0.5) * 100;
+              state.meteors.push(minion);
+            }
+          }
+          
+          // Check if waves hit boss
+          for (let i = state.waves.length - 1; i >= 0; i--) {
+            const w = state.waves[i];
+            const dx = boss.x - w.x;
+            const dy = boss.y - w.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const ringThickness = w.strong ? 20 : 12;
+            
+            if (Math.abs(dist - w.radius) < ringThickness + boss.radius) {
+              const damage = w.strong ? 25 : 10;
+              boss.hp -= damage;
+              createExplosion(state.particles, boss.x, boss.y, "#FFD700", 30);
+              state.bgFlash = { color: "#FFD700", alpha: 0.3 };
+              state.screenShake = { x: 0, y: 0, timer: 10 };
+              
+              // Score for hitting boss
+              state.score += damage;
+              state.scorePopups.push({
+                x: boss.x,
+                y: boss.y - boss.radius,
+                value: damage,
+                life: 1,
+                maxLife: 1,
+                color: "#FFD700",
+              });
+              
+              if (boss.hp <= 0) {
+                // Boss defeated!
+                state.bossDefeated = true;
+                state.score += 500; // Bonus for defeating boss
+                createExplosion(state.particles, boss.x, boss.y, "#FFD700", 100);
+                state.bgFlash = { color: "#FFD700", alpha: 0.8 };
+                state.screenShake = { x: 0, y: 0, timer: 30 };
+                state.boss = null;
+              }
+              break;
+            }
+          }
+        }
       }
 
       // Draw meteors
       for (const m of state.meteors) {
         drawMeteor(ctx, m);
+      }
+
+      // Draw boss (Phase 2)
+      if (state.boss && !state.bossDefeated) {
+        drawBossDOGE(ctx, state.boss);
+        
+        // Boss HP bar
+        const barW = 300;
+        const barH = 20;
+        const barX = CENTER_X - barW / 2;
+        const barY = HEIGHT - 50;
+        
+        // Background
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.beginPath();
+        ctx.roundRect(barX - 5, barY - 5, barW + 10, barH + 10, 6);
+        ctx.fill();
+        
+        // HP bar
+        const hpFrac = state.boss.hp / state.boss.maxHp;
+        const hpGrad = ctx.createLinearGradient(barX, 0, barX + barW * hpFrac, 0);
+        hpGrad.addColorStop(0, "#FFD700");
+        hpGrad.addColorStop(1, "#FFA500");
+        ctx.fillStyle = hpGrad;
+        ctx.beginPath();
+        ctx.roundRect(barX, barY, barW * hpFrac, barH, 4);
+        ctx.fill();
+        
+        // Border
+        ctx.strokeStyle = "#FFD700";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(barX, barY, barW, barH, 4);
+        ctx.stroke();
+        
+        // Label
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 12px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`👑 DOGE BOSS: ${state.boss.hp}/${state.boss.maxHp}`, CENTER_X, barY + barH / 2);
       }
 
       // Draw SUI coin
@@ -1711,7 +2256,13 @@ export default function Game() {
               <div>⌨️ <b>P / Esc</b> — Pause</div>
               <div>💥 Each meteor hit = <span style={{ color: "#ff4466" }}>-10% HP</span></div>
               <div style={{ marginTop: "6px", paddingTop: "6px", borderTop: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", fontSize: "12px" }}>
-                💰 BTC <span style={{ color: "#F7931A" }}>+50</span> · ETH <span style={{ color: "#627EEA" }}>+30</span> · SOL <span style={{ color: "#9945FF" }}>+20</span> · PEPE <span style={{ color: "#00A86B" }}>+40</span>
+                💰 Phase I: BTC <span style={{ color: "#F7931A" }}>+50</span> · ETH <span style={{ color: "#627EEA" }}>+30</span> · SOL <span style={{ color: "#9945FF" }}>+20</span> · PEPE <span style={{ color: "#00A86B" }}>+40</span>
+              </div>
+              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "12px" }}>
+                💰 Phase II: DOGE <span style={{ color: "#C2A633" }}>+60</span> · SHIB <span style={{ color: "#FFA409" }}>+70</span> · BONK <span style={{ color: "#FF6B35" }}>+55</span> · WIF <span style={{ color: "#A855F7" }}>+80</span>
+              </div>
+              <div style={{ color: "rgba(255,215,0,0.8)", fontSize: "12px", marginTop: "4px" }}>
+                👑 Reach 1500 SUI to face the DOGE BOSS!
               </div>
               <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>
                 Starting balance: <span style={{ color: "#ffd700" }}>100 SUI</span>
@@ -1804,7 +2355,7 @@ export default function Game() {
           </button>
         )}
 
-        {/* Phase 1 Complete overlay */}
+        {/* Phase Complete overlay */}
         {gamePhase === "phasecomplete" && (
           <div
             style={{
@@ -1825,33 +2376,36 @@ export default function Game() {
                   fontSize: "42px",
                   fontWeight: "bold",
                   fontFamily: "monospace",
-                  color: "#00ff88",
-                  textShadow: "0 0 30px #00ff88, 0 0 60px #00aa55",
+                  color: "#FFD700",
+                  textShadow: "0 0 30px #FFD700, 0 0 60px #FFA500",
                   letterSpacing: "3px",
                   marginBottom: "12px",
                 }}
               >
-                🎉 PHASE 1 COMPLETE! 🎉
+                🏆 VICTORY! 🏆
               </div>
-              <div style={{ color: "#ffd700", fontFamily: "monospace", fontSize: "24px", fontWeight: "bold" }}>
-                Score: 1500+ SUI
+              <div style={{ color: "#00ff88", fontFamily: "monospace", fontSize: "20px", fontWeight: "bold" }}>
+                All Phases Complete!
+              </div>
+              <div style={{ color: "#ffd700", fontFamily: "monospace", fontSize: "28px", fontWeight: "bold", marginTop: "8px" }}>
+                Final Score: ${finalScore.toLocaleString()} SUI
               </div>
             </div>
             <div
               style={{
-                background: "rgba(0,255,136,0.1)",
-                border: "1px solid rgba(0,255,136,0.3)",
+                background: "rgba(255,215,0,0.1)",
+                border: "1px solid rgba(255,215,0,0.3)",
                 borderRadius: "12px",
                 padding: "20px 32px",
                 textAlign: "center",
                 fontFamily: "monospace",
               }}
             >
-              <div style={{ color: "#00ffcc", fontSize: "18px", fontWeight: "bold", marginBottom: "8px" }}>
-                Phase II Coming Soon
+              <div style={{ color: "#FFD700", fontSize: "18px", fontWeight: "bold", marginBottom: "8px" }}>
+                🎉 You defeated the DOGE BOSS! 🎉
               </div>
               <div style={{ color: "rgba(255,255,255,0.7)", fontSize: "14px" }}>
-                Stay tuned — project under development
+                SUI is safe from the meme invasion!
               </div>
             </div>
             <button
@@ -1861,22 +2415,22 @@ export default function Game() {
                 fontSize: "18px",
                 fontWeight: "bold",
                 fontFamily: "monospace",
-                background: "linear-gradient(135deg, #00cc66, #008844)",
-                color: "#ffffff",
+                background: "linear-gradient(135deg, #FFD700, #FFA500)",
+                color: "#000000",
                 border: "none",
                 borderRadius: "10px",
                 cursor: "pointer",
-                boxShadow: "0 0 24px rgba(0,204,102,0.6)",
+                boxShadow: "0 0 24px rgba(255,215,0,0.6)",
                 letterSpacing: "2px",
                 transition: "transform 0.1s, box-shadow 0.1s",
               }}
               onMouseEnter={e => {
                 (e.target as HTMLButtonElement).style.transform = "scale(1.06)";
-                (e.target as HTMLButtonElement).style.boxShadow = "0 0 40px rgba(0,204,102,0.9)";
+                (e.target as HTMLButtonElement).style.boxShadow = "0 0 40px rgba(255,215,0,0.9)";
               }}
               onMouseLeave={e => {
                 (e.target as HTMLButtonElement).style.transform = "scale(1)";
-                (e.target as HTMLButtonElement).style.boxShadow = "0 0 24px rgba(0,204,102,0.6)";
+                (e.target as HTMLButtonElement).style.boxShadow = "0 0 24px rgba(255,215,0,0.6)";
               }}
             >
               🔄 PLAY AGAIN
