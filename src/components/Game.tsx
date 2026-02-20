@@ -702,7 +702,7 @@ export default function Game() {
         x: originX,
         y: originY,
         radius: 8,
-        maxRadius: 280,
+        maxRadius: 200,
         alpha: 1,
         strong: false,
       });
@@ -990,7 +990,7 @@ export default function Game() {
           const dy = m.y - w.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           // Wave ring hits meteor if meteor center is within the ring band
-          const ringThickness = w.strong ? 28 : 18;
+          const ringThickness = w.strong ? 20 : 12;
           if (Math.abs(dist - w.radius) < ringThickness + m.radius) {
             const coinColor = COIN_COLORS[m.type].primary;
             createExplosion(state.particles, m.x, m.y, coinColor, 22);
