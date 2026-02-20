@@ -139,10 +139,13 @@ interface ActivePowerUp {
   duration: number; // remaining time in frames
 }
 
-// Boss enemy for Phase 2
+// Boss types for each phase
+type BossType = "PEPE_KING" | "BONK_BOSS";
+
+// Boss enemy - different boss for each phase
 interface Boss {
   id: number;
-  type: "DOGE_BOSS";
+  type: BossType;
   x: number;
   y: number;
   vx: number;
@@ -519,20 +522,21 @@ function spawnMeteor(id: number, phase: 1 | 2): Meteor {
   };
 }
 
-// Spawn boss for Phase 2
-function spawnBoss(id: number): Boss {
+// Spawn boss for Phase 1 (PEPE KING) or Phase 2 (BONK BOSS)
+function spawnBoss(id: number, bossType: BossType): Boss {
+  const isPhase1 = bossType === "PEPE_KING";
   return {
     id,
-    type: "DOGE_BOSS",
+    type: bossType,
     x: WIDTH / 2,
     y: -80,
     vx: 0,
     vy: 0.5,
-    radius: 70,
-    hp: 500,
-    maxHp: 500,
+    radius: isPhase1 ? 60 : 75,
+    hp: isPhase1 ? 300 : 600,
+    maxHp: isPhase1 ? 300 : 600,
     rotation: 0,
-    rotSpeed: 0.01,
+    rotSpeed: isPhase1 ? 0.008 : 0.012,
     attackTimer: 0,
     phase: 1,
   };
@@ -908,41 +912,41 @@ function drawWIFLogo(ctx: CanvasRenderingContext2D, r: number) {
   ctx.restore();
 }
 
-/** Draw Boss DOGE — giant Shiba with crown */
-function drawBossDOGE(ctx: CanvasRenderingContext2D, boss: Boss) {
+/** Draw Boss PEPE KING — giant frog with crown (Phase 1 boss) */
+function drawBossPEPE(ctx: CanvasRenderingContext2D, boss: Boss) {
   const r = boss.radius;
   ctx.save();
   ctx.translate(boss.x, boss.y);
   ctx.rotate(boss.rotation);
   
   // Glow effect
-  ctx.shadowColor = "#C2A633";
+  ctx.shadowColor = "#00FF88";
   ctx.shadowBlur = 40;
   
-  // Main body
+  // Main body - green frog
   const grad = ctx.createRadialGradient(-r * 0.2, -r * 0.2, r * 0.1, 0, 0, r);
-  grad.addColorStop(0, "#FFD700");
-  grad.addColorStop(0.5, "#C2A633");
-  grad.addColorStop(1, "#8B7500");
+  grad.addColorStop(0, "#00FF88");
+  grad.addColorStop(0.5, "#00A86B");
+  grad.addColorStop(1, "#006644");
   ctx.beginPath();
   ctx.arc(0, 0, r, 0, Math.PI * 2);
   ctx.fillStyle = grad;
   ctx.fill();
-  ctx.strokeStyle = "#FFD700";
+  ctx.strokeStyle = "#00FF88";
   ctx.lineWidth = 3;
   ctx.stroke();
   
   ctx.shadowBlur = 0;
   
-  // Crown
+  // Crown - golden with gems
   ctx.beginPath();
-  ctx.moveTo(-r * 0.6, -r * 0.5);
-  ctx.lineTo(-r * 0.4, -r * 0.9);
-  ctx.lineTo(-r * 0.2, -r * 0.6);
-  ctx.lineTo(0, -r * 1.0);
-  ctx.lineTo(r * 0.2, -r * 0.6);
-  ctx.lineTo(r * 0.4, -r * 0.9);
-  ctx.lineTo(r * 0.6, -r * 0.5);
+  ctx.moveTo(-r * 0.6, -r * 0.45);
+  ctx.lineTo(-r * 0.45, -r * 0.95);
+  ctx.lineTo(-r * 0.25, -r * 0.6);
+  ctx.lineTo(0, -r * 1.1);
+  ctx.lineTo(r * 0.25, -r * 0.6);
+  ctx.lineTo(r * 0.45, -r * 0.95);
+  ctx.lineTo(r * 0.6, -r * 0.45);
   ctx.closePath();
   ctx.fillStyle = "#FFD700";
   ctx.fill();
@@ -950,65 +954,196 @@ function drawBossDOGE(ctx: CanvasRenderingContext2D, boss: Boss) {
   ctx.lineWidth = 2;
   ctx.stroke();
   
-  // Eyes (angry)
+  // Crown gems
+  ctx.beginPath();
+  ctx.arc(0, -r * 0.75, r * 0.08, 0, Math.PI * 2);
+  ctx.fillStyle = "#FF0000";
+  ctx.fill();
+  
+  // Eyes (menacing)
   const eyeY = -r * 0.1;
   const eyeSpacing = r * 0.35;
   
   // Left eye
   ctx.beginPath();
-  ctx.ellipse(-eyeSpacing, eyeY, r * 0.18, r * 0.22, -0.2, 0, Math.PI * 2);
+  ctx.ellipse(-eyeSpacing, eyeY, r * 0.2, r * 0.25, 0, 0, Math.PI * 2);
   ctx.fillStyle = "#ffffff";
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(-eyeSpacing, eyeY, r * 0.1, 0, Math.PI * 2);
+  ctx.arc(-eyeSpacing, eyeY, r * 0.12, 0, Math.PI * 2);
   ctx.fillStyle = "#ff0000";
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(-eyeSpacing, eyeY, r * 0.05, 0, Math.PI * 2);
+  ctx.arc(-eyeSpacing, eyeY, r * 0.06, 0, Math.PI * 2);
   ctx.fillStyle = "#000000";
   ctx.fill();
   
   // Right eye
   ctx.beginPath();
-  ctx.ellipse(eyeSpacing, eyeY, r * 0.18, r * 0.22, 0.2, 0, Math.PI * 2);
+  ctx.ellipse(eyeSpacing, eyeY, r * 0.2, r * 0.25, 0, 0, Math.PI * 2);
   ctx.fillStyle = "#ffffff";
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(eyeSpacing, eyeY, r * 0.1, 0, Math.PI * 2);
+  ctx.arc(eyeSpacing, eyeY, r * 0.12, 0, Math.PI * 2);
   ctx.fillStyle = "#ff0000";
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(eyeSpacing, eyeY, r * 0.05, 0, Math.PI * 2);
+  ctx.arc(eyeSpacing, eyeY, r * 0.06, 0, Math.PI * 2);
   ctx.fillStyle = "#000000";
   ctx.fill();
   
   // Angry eyebrows
-  ctx.strokeStyle = "#8B4513";
+  ctx.strokeStyle = "#004422";
+  ctx.lineWidth = r * 0.07;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-eyeSpacing - r * 0.25, eyeY - r * 0.4);
+  ctx.lineTo(-eyeSpacing + r * 0.1, eyeY - r * 0.25);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(eyeSpacing + r * 0.25, eyeY - r * 0.4);
+  ctx.lineTo(eyeSpacing - r * 0.1, eyeY - r * 0.25);
+  ctx.stroke();
+  
+  // Nose
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.15, r * 0.15, r * 0.1, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#004422";
+  ctx.fill();
+  
+  // Evil grin
+  ctx.beginPath();
+  ctx.arc(0, r * 0.3, r * 0.4, 0.1 * Math.PI, 0.9 * Math.PI);
+  ctx.strokeStyle = "#004422";
+  ctx.lineWidth = r * 0.06;
+  ctx.stroke();
+  
+  ctx.restore();
+}
+
+/** Draw Boss BONK — giant fire dog (Phase 2 boss) */
+function drawBossBONK(ctx: CanvasRenderingContext2D, boss: Boss) {
+  const r = boss.radius;
+  ctx.save();
+  ctx.translate(boss.x, boss.y);
+  ctx.rotate(boss.rotation);
+  
+  // Glow effect - fiery
+  ctx.shadowColor = "#FF6B35";
+  ctx.shadowBlur = 50;
+  
+  // Main body - fire gradient
+  const grad = ctx.createRadialGradient(-r * 0.2, -r * 0.2, r * 0.1, 0, 0, r);
+  grad.addColorStop(0, "#FFFF00");
+  grad.addColorStop(0.3, "#FFA500");
+  grad.addColorStop(0.6, "#FF6B35");
+  grad.addColorStop(1, "#CC4400");
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = "#FF6B35";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  
+  ctx.shadowBlur = 0;
+  
+  // Fire crown/horns
+  for (let i = -2; i <= 2; i++) {
+    const angle = (i * 0.3) - Math.PI / 2;
+    const hornLen = r * (0.4 + Math.abs(i) * 0.15);
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(angle - 0.15) * r * 0.7, Math.sin(angle - 0.15) * r * 0.7);
+    ctx.lineTo(Math.cos(angle) * (r + hornLen), Math.sin(angle) * (r + hornLen));
+    ctx.lineTo(Math.cos(angle + 0.15) * r * 0.7, Math.sin(angle + 0.15) * r * 0.7);
+    ctx.closePath();
+    const hornGrad = ctx.createLinearGradient(0, -r, 0, -r - hornLen);
+    hornGrad.addColorStop(0, "#FF6B35");
+    hornGrad.addColorStop(0.5, "#FFA500");
+    hornGrad.addColorStop(1, "#FFFF00");
+    ctx.fillStyle = hornGrad;
+    ctx.fill();
+  }
+  
+  // Eyes (fierce)
+  const eyeY = -r * 0.05;
+  const eyeSpacing = r * 0.35;
+  
+  // Left eye
+  ctx.beginPath();
+  ctx.ellipse(-eyeSpacing, eyeY, r * 0.18, r * 0.22, -0.15, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(-eyeSpacing + r * 0.02, eyeY, r * 0.1, 0, Math.PI * 2);
+  ctx.fillStyle = "#FF0000";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(-eyeSpacing + r * 0.02, eyeY, r * 0.05, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  
+  // Right eye
+  ctx.beginPath();
+  ctx.ellipse(eyeSpacing, eyeY, r * 0.18, r * 0.22, 0.15, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(eyeSpacing - r * 0.02, eyeY, r * 0.1, 0, Math.PI * 2);
+  ctx.fillStyle = "#FF0000";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(eyeSpacing - r * 0.02, eyeY, r * 0.05, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  
+  // Angry eyebrows - fire style
+  ctx.strokeStyle = "#8B0000";
   ctx.lineWidth = r * 0.06;
   ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(-eyeSpacing - r * 0.2, eyeY - r * 0.35);
-  ctx.lineTo(-eyeSpacing + r * 0.15, eyeY - r * 0.25);
+  ctx.lineTo(-eyeSpacing + r * 0.15, eyeY - r * 0.22);
   ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(eyeSpacing + r * 0.2, eyeY - r * 0.35);
-  ctx.lineTo(eyeSpacing - r * 0.15, eyeY - r * 0.25);
+  ctx.lineTo(eyeSpacing - r * 0.15, eyeY - r * 0.22);
   ctx.stroke();
   
   // Nose
   ctx.beginPath();
   ctx.ellipse(0, r * 0.2, r * 0.12, r * 0.08, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "#333333";
+  ctx.fillStyle = "#8B0000";
   ctx.fill();
   
-  // Menacing smile
+  // Menacing smile with teeth
   ctx.beginPath();
   ctx.arc(0, r * 0.35, r * 0.35, 0.15 * Math.PI, 0.85 * Math.PI);
-  ctx.strokeStyle = "#333333";
+  ctx.strokeStyle = "#8B0000";
   ctx.lineWidth = r * 0.05;
   ctx.stroke();
   
+  // Teeth
+  for (let i = -3; i <= 3; i++) {
+    const tx = i * r * 0.08;
+    ctx.beginPath();
+    ctx.moveTo(tx - r * 0.04, r * 0.32);
+    ctx.lineTo(tx, r * 0.42);
+    ctx.lineTo(tx + r * 0.04, r * 0.32);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+  }
+  
   ctx.restore();
+}
+
+/** Draw boss based on type */
+function drawBoss(ctx: CanvasRenderingContext2D, boss: Boss) {
+  if (boss.type === "PEPE_KING") {
+    drawBossPEPE(ctx, boss);
+  } else {
+    drawBossBONK(ctx, boss);
+  }
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -1494,29 +1629,40 @@ export default function Game() {
             if (hasHeal) {
               state.hp = Math.min(100, state.hp + 2);
             }
-            
-            // Check for phase 1 completion (1500 points)
-            if (state.score >= 1500 && state.currentPhase === 1) {
-              state.currentPhase = 2;
-              state.spawnInterval = 60; // faster spawns in phase 2
-              // Spawn the boss after a short delay
-              state.boss = spawnBoss(state.nextMeteorId++);
-              state.bgFlash = { color: "#FFD700", alpha: 0.5 };
-            }
-            
-            // Check for phase 2 completion (boss defeated + 3000 points)
-            if (state.currentPhase === 2 && state.bossDefeated && state.score >= 3000) {
-              state.gameOver = true;
-              if (state.score > state.highScore) {
-                state.highScore = state.score;
-                localStorage.setItem("suiDefenderHighScore", state.score.toString());
-              }
-              setFinalScore(state.score);
-              gamePhaseRef.current = "phasecomplete";
-              setGamePhase("phasecomplete");
-              stopMusic();
-            }
           }
+        }
+        
+        // Check for boss spawn in Phase 1 (at 1400 points, before phase transition)
+        if (state.score >= 1400 && state.currentPhase === 1 && !state.boss && !state.bossDefeated) {
+          state.boss = spawnBoss(state.nextMeteorId++, "PEPE_KING");
+          state.bgFlash = { color: "#00FF88", alpha: 0.5 };
+        }
+        
+        // Check for boss spawn in Phase 2 (at 2900 points, before victory)
+        if (state.score >= 2900 && state.currentPhase === 2 && !state.boss && !state.bossDefeated) {
+          state.boss = spawnBoss(state.nextMeteorId++, "BONK_BOSS");
+          state.bgFlash = { color: "#FF6B35", alpha: 0.5 };
+        }
+        
+        // Phase 1 to Phase 2 transition (after PEPE KING defeated + 1500 points)
+        if (state.currentPhase === 1 && state.bossDefeated && state.score >= 1500) {
+          state.currentPhase = 2;
+          state.bossDefeated = false; // Reset for Phase 2 boss
+          state.spawnInterval = 60; // faster spawns in phase 2
+          state.bgFlash = { color: "#FFD700", alpha: 0.5 };
+        }
+        
+        // Phase 2 completion (after BONK BOSS defeated + 3000 points)
+        if (state.currentPhase === 2 && state.bossDefeated && state.score >= 3000) {
+          state.gameOver = true;
+          if (state.score > state.highScore) {
+            state.highScore = state.score;
+            localStorage.setItem("suiDefenderHighScore", state.score.toString());
+          }
+          setFinalScore(state.score);
+          gamePhaseRef.current = "phasecomplete";
+          setGamePhase("phasecomplete");
+          stopMusic();
         }
 
         // Draw wave ring from click origin
@@ -1640,21 +1786,47 @@ export default function Game() {
       }
 
       // Phase indicator
-      const phaseText = state.currentPhase === 1 ? "PHASE I" : "PHASE II: MEME WARS";
-      const phaseColor = state.currentPhase === 1 ? "#00c8ff" : "#FFD700";
+      let phaseText: string;
+      let phaseColor: string;
+      if (state.boss && !state.bossDefeated) {
+        phaseText = state.boss.type === "PEPE_KING" ? "⚠ BOSS: PEPE KING ⚠" : "⚠ BOSS: BONK BOSS ⚠";
+        phaseColor = state.boss.type === "PEPE_KING" ? "#00FF88" : "#FF6B35";
+      } else {
+        phaseText = state.currentPhase === 1 ? "PHASE I" : "PHASE II: MEME WARS";
+        phaseColor = state.currentPhase === 1 ? "#00c8ff" : "#FFD700";
+      }
       ctx.fillStyle = phaseColor;
       ctx.font = "bold 14px monospace";
       ctx.textAlign = "right";
       ctx.fillText(phaseText, WIDTH - 18, 46);
       
-      // Phase 2 progress (if in phase 1, show progress to phase 2)
-      if (state.currentPhase === 1) {
-        const progress = Math.min(state.score / 1500, 1);
+      // Progress bar (shows progress to boss or next phase)
+      if (state.boss && !state.bossDefeated) {
+        // Show boss HP as progress
+        const barW = 100;
+        const barX = WIDTH - barW - 18;
+        const bossColor = state.boss.type === "PEPE_KING" ? "#00FF88" : "#FF6B35";
+        ctx.fillStyle = "rgba(255,255,255,0.1)";
+        ctx.fillRect(barX, 62, barW, 6);
+        ctx.fillStyle = bossColor;
+        ctx.fillRect(barX, 62, barW * (state.boss.hp / state.boss.maxHp), 6);
+      } else if (state.currentPhase === 1) {
+        // Progress to boss in Phase 1
+        const progress = Math.min(state.score / 1400, 1);
         const barW = 100;
         const barX = WIDTH - barW - 18;
         ctx.fillStyle = "rgba(255,255,255,0.1)";
         ctx.fillRect(barX, 62, barW, 6);
         ctx.fillStyle = "#00ff88";
+        ctx.fillRect(barX, 62, barW * progress, 6);
+      } else if (state.currentPhase === 2 && !state.bossDefeated) {
+        // Progress to boss in Phase 2
+        const progress = Math.min((state.score - 1500) / 1400, 1);
+        const barW = 100;
+        const barX = WIDTH - barW - 18;
+        ctx.fillStyle = "rgba(255,255,255,0.1)";
+        ctx.fillRect(barX, 62, barW, 6);
+        ctx.fillStyle = "#FF6B35";
         ctx.fillRect(barX, 62, barW * progress, 6);
       }
 
@@ -1932,7 +2104,7 @@ export default function Game() {
           }
         }
 
-        // Update boss (Phase 2)
+        // Update boss (both phases)
         if (state.boss && !state.bossDefeated) {
           const boss = state.boss;
           boss.rotation += boss.rotSpeed;
@@ -1943,19 +2115,21 @@ export default function Game() {
             boss.y += boss.vy;
           } else {
             // Orbit pattern
-            const orbitSpeed = 0.008;
-            const orbitRadius = 200;
+            const orbitSpeed = boss.type === "PEPE_KING" ? 0.006 : 0.01;
+            const orbitRadius = boss.type === "PEPE_KING" ? 180 : 220;
             const angle = Date.now() * orbitSpeed;
             boss.x = CENTER_X + Math.cos(angle) * orbitRadius;
             boss.y = 150 + Math.sin(angle) * 50;
           }
           
           // Boss spawns minions periodically
-          if (boss.attackTimer % 120 === 0) {
-            // Spawn 2-3 minions
-            const count = 2 + Math.floor(Math.random() * 2);
+          const spawnRate = boss.type === "PEPE_KING" ? 150 : 100;
+          if (boss.attackTimer % spawnRate === 0) {
+            // Spawn minions based on phase
+            const count = boss.type === "PEPE_KING" ? 2 : 3;
+            const phase = boss.type === "PEPE_KING" ? 1 : 2;
             for (let i = 0; i < count; i++) {
-              const minion = spawnMeteor(state.nextMeteorId++, 2);
+              const minion = spawnMeteor(state.nextMeteorId++, phase);
               minion.x = boss.x + (Math.random() - 0.5) * 100;
               minion.y = boss.y + (Math.random() - 0.5) * 100;
               state.meteors.push(minion);
@@ -1973,8 +2147,9 @@ export default function Game() {
             if (Math.abs(dist - w.radius) < ringThickness + boss.radius) {
               const damage = w.strong ? 25 : 10;
               boss.hp -= damage;
-              createExplosion(state.particles, boss.x, boss.y, "#FFD700", 30);
-              state.bgFlash = { color: "#FFD700", alpha: 0.3 };
+              const bossColor = boss.type === "PEPE_KING" ? "#00FF88" : "#FF6B35";
+              createExplosion(state.particles, boss.x, boss.y, bossColor, 30);
+              state.bgFlash = { color: bossColor, alpha: 0.3 };
               state.screenShake = { x: 0, y: 0, timer: 10 };
               
               // Score for hitting boss
@@ -1985,15 +2160,16 @@ export default function Game() {
                 value: damage,
                 life: 1,
                 maxLife: 1,
-                color: "#FFD700",
+                color: bossColor,
               });
               
               if (boss.hp <= 0) {
                 // Boss defeated!
                 state.bossDefeated = true;
-                state.score += 500; // Bonus for defeating boss
-                createExplosion(state.particles, boss.x, boss.y, "#FFD700", 100);
-                state.bgFlash = { color: "#FFD700", alpha: 0.8 };
+                const bonus = boss.type === "PEPE_KING" ? 300 : 600;
+                state.score += bonus;
+                createExplosion(state.particles, boss.x, boss.y, bossColor, 100);
+                state.bgFlash = { color: bossColor, alpha: 0.8 };
                 state.screenShake = { x: 0, y: 0, timer: 30 };
                 state.boss = null;
               }
@@ -2008,15 +2184,20 @@ export default function Game() {
         drawMeteor(ctx, m);
       }
 
-      // Draw boss (Phase 2)
+      // Draw boss (both phases)
       if (state.boss && !state.bossDefeated) {
-        drawBossDOGE(ctx, state.boss);
+        drawBoss(ctx, state.boss);
         
         // Boss HP bar
         const barW = 300;
         const barH = 20;
         const barX = CENTER_X - barW / 2;
         const barY = HEIGHT - 50;
+        
+        // Boss colors based on type
+        const bossColor = state.boss.type === "PEPE_KING" ? "#00FF88" : "#FF6B35";
+        const bossColor2 = state.boss.type === "PEPE_KING" ? "#00A86B" : "#FFA500";
+        const bossName = state.boss.type === "PEPE_KING" ? "👑 PEPE KING" : "🔥 BONK BOSS";
         
         // Background
         ctx.fillStyle = "rgba(0,0,0,0.5)";
@@ -2027,15 +2208,15 @@ export default function Game() {
         // HP bar
         const hpFrac = state.boss.hp / state.boss.maxHp;
         const hpGrad = ctx.createLinearGradient(barX, 0, barX + barW * hpFrac, 0);
-        hpGrad.addColorStop(0, "#FFD700");
-        hpGrad.addColorStop(1, "#FFA500");
+        hpGrad.addColorStop(0, bossColor);
+        hpGrad.addColorStop(1, bossColor2);
         ctx.fillStyle = hpGrad;
         ctx.beginPath();
         ctx.roundRect(barX, barY, barW * hpFrac, barH, 4);
         ctx.fill();
         
         // Border
-        ctx.strokeStyle = "#FFD700";
+        ctx.strokeStyle = bossColor;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.roundRect(barX, barY, barW, barH, 4);
@@ -2046,7 +2227,7 @@ export default function Game() {
         ctx.font = "bold 12px monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(`👑 DOGE BOSS: ${state.boss.hp}/${state.boss.maxHp}`, CENTER_X, barY + barH / 2);
+        ctx.fillText(`${bossName}: ${state.boss.hp}/${state.boss.maxHp}`, CENTER_X, barY + barH / 2);
       }
 
       // Draw SUI coin
