@@ -153,11 +153,13 @@ function getAudioCtx(): AudioContext {
 // Upbeat chiptune-style music — energetic arpeggio + bass + drums
 let musicIntervals: ReturnType<typeof setInterval>[] = [];
 
-function startMusic() {
+async function startMusic() {
   if (musicRunning) return;
   try {
     const ctx = getAudioCtx();
-    if (ctx.state === "suspended") ctx.resume();
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
 
     // Driving bass line — pumping 8th notes
     const bassNotes = [110, 110, 138.6, 110, 146.8, 110, 138.6, 123.5];
