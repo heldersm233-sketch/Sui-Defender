@@ -1412,6 +1412,9 @@ export default function Game() {
               <div style={{ color: "rgba(255,255,255,0.55)", fontFamily: "monospace", fontSize: "13px" }}>
                 Proteja a moeda SUI dos meteoros cripto!
               </div>
+              <div style={{ color: "rgba(255,165,0,0.8)", fontFamily: "monospace", fontSize: "11px", marginTop: "8px", letterSpacing: "1px" }}>
+                🚧 PROJECT UNDER DEVELOPMENT — PROTOTYPE 🚧
+              </div>
             </div>
 
             {/* Instructions box */}
