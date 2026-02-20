@@ -566,7 +566,7 @@ function drawPEPELogo(ctx: CanvasRenderingContext2D, r: number) {
   ctx.restore();
 }
 
-/** Draw the SUI logo — the official water-drop / teardrop shape */
+/** Draw the SUI logo — SUI text with the official S-curve symbol */
 function drawSUILogo(ctx: CanvasRenderingContext2D, r: number) {
   const s = r * 0.72;
   ctx.save();
@@ -1410,7 +1410,7 @@ export default function Game() {
                 ⚡ SUI DEFENDER ⚡
               </div>
               <div style={{ color: "rgba(255,255,255,0.55)", fontFamily: "monospace", fontSize: "13px" }}>
-                Proteja a moeda SUI dos meteoros cripto!
+                Protect the SUI coin from crypto meteors!
               </div>
               <div style={{ color: "rgba(255,165,0,0.8)", fontFamily: "monospace", fontSize: "11px", marginTop: "8px", letterSpacing: "1px" }}>
                 🚧 PROJECT UNDER DEVELOPMENT — PROTOTYPE 🚧
@@ -1432,17 +1432,17 @@ export default function Game() {
               }}
             >
               <div style={{ color: "#00ffcc", fontWeight: "bold", marginBottom: "4px", fontSize: "14px" }}>
-                🎮 COMO JOGAR
+                🎮 HOW TO PLAY
               </div>
-              <div>🖱️ <b>Clique</b> em qualquer lugar — Onda de ataque <span style={{ color: "#00ffcc" }}>(-10 SUI)</span></div>
-              <div>🖱️ <b>Segure 2s</b> — Onda forte (cobre toda a tela!) <span style={{ color: "#ff8800" }}>(-30 SUI)</span></div>
-              <div>⌨️ <b>P / Esc</b> — Pausar</div>
-              <div>💥 Cada meteoro que acerta = <span style={{ color: "#ff4466" }}>-10% HP</span></div>
+              <div>🖱️ <b>Click anywhere</b> — Wave attack <span style={{ color: "#00ffcc" }}>(-10 SUI)</span></div>
+              <div>🖱️ <b>Hold 2s</b> — Strong wave (covers entire screen!) <span style={{ color: "#ff8800" }}>(-30 SUI)</span></div>
+              <div>⌨️ <b>P / Esc</b> — Pause</div>
+              <div>💥 Each meteor hit = <span style={{ color: "#ff4466" }}>-10% HP</span></div>
               <div style={{ marginTop: "6px", paddingTop: "6px", borderTop: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", fontSize: "12px" }}>
                 💰 BTC <span style={{ color: "#F7931A" }}>+50</span> · ETH <span style={{ color: "#627EEA" }}>+30</span> · SOL <span style={{ color: "#9945FF" }}>+20</span> · PEPE <span style={{ color: "#00A86B" }}>+40</span>
               </div>
               <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>
-                Saldo inicial: <span style={{ color: "#ffd700" }}>100 SUI</span>
+                Starting balance: <span style={{ color: "#ffd700" }}>100 SUI</span>
               </div>
             </div>
 
