@@ -617,8 +617,8 @@ function drawSUILogo(ctx: CanvasRenderingContext2D, r: number) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [gamePhase, setGamePhase] = useState<"start" | "playing" | "paused" | "gameover">("start");
-  const gamePhaseRef = useRef<"start" | "playing" | "paused" | "gameover">("start");
+  const [gamePhase, setGamePhase] = useState<"start" | "playing" | "paused" | "gameover" | "phasecomplete">("start");
+  const gamePhaseRef = useRef<"start" | "playing" | "paused" | "gameover" | "phasecomplete">("start");
 
   const stateRef = useRef<GameState>({
     score: 100,
@@ -1007,6 +1007,13 @@ export default function Game() {
             });
             playExplosionSound(m.type);
             state.meteors.splice(j, 1);
+            // Check for phase 1 completion (1500 points)
+            if (state.score >= 1500) {
+              state.gameOver = true;
+              gamePhaseRef.current = "phasecomplete";
+              setGamePhase("phasecomplete");
+              stopMusic();
+            }
           }
         }
 
@@ -1520,6 +1527,86 @@ export default function Game() {
           >
             {gamePhase === "paused" ? "▶ RESUME" : "⏸ PAUSE"}
           </button>
+        )}
+
+        {/* Phase 1 Complete overlay */}
+        {gamePhase === "phasecomplete" && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: "16px",
+              background: "rgba(0,50,30,0.85)",
+              gap: "24px",
+            }}
+          >
+            <div style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  fontSize: "42px",
+                  fontWeight: "bold",
+                  fontFamily: "monospace",
+                  color: "#00ff88",
+                  textShadow: "0 0 30px #00ff88, 0 0 60px #00aa55",
+                  letterSpacing: "3px",
+                  marginBottom: "12px",
+                }}
+              >
+                🎉 PHASE 1 COMPLETE! 🎉
+              </div>
+              <div style={{ color: "#ffd700", fontFamily: "monospace", fontSize: "24px", fontWeight: "bold" }}>
+                Score: 1500+ SUI
+              </div>
+            </div>
+            <div
+              style={{
+                background: "rgba(0,255,136,0.1)",
+                border: "1px solid rgba(0,255,136,0.3)",
+                borderRadius: "12px",
+                padding: "20px 32px",
+                textAlign: "center",
+                fontFamily: "monospace",
+              }}
+            >
+              <div style={{ color: "#00ffcc", fontSize: "18px", fontWeight: "bold", marginBottom: "8px" }}>
+                Phase II Coming Soon
+              </div>
+              <div style={{ color: "rgba(255,255,255,0.7)", fontSize: "14px" }}>
+                Stay tuned — project under development
+              </div>
+            </div>
+            <button
+              onClick={restartGame}
+              style={{
+                padding: "14px 48px",
+                fontSize: "18px",
+                fontWeight: "bold",
+                fontFamily: "monospace",
+                background: "linear-gradient(135deg, #00cc66, #008844)",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "10px",
+                cursor: "pointer",
+                boxShadow: "0 0 24px rgba(0,204,102,0.6)",
+                letterSpacing: "2px",
+                transition: "transform 0.1s, box-shadow 0.1s",
+              }}
+              onMouseEnter={e => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1.06)";
+                (e.target as HTMLButtonElement).style.boxShadow = "0 0 40px rgba(0,204,102,0.9)";
+              }}
+              onMouseLeave={e => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1)";
+                (e.target as HTMLButtonElement).style.boxShadow = "0 0 24px rgba(0,204,102,0.6)";
+              }}
+            >
+              🔄 PLAY AGAIN
+            </button>
+          </div>
         )}
 
         {/* Game Over overlay with restart button */}
