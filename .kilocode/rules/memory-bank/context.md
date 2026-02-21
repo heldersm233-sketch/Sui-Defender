@@ -23,6 +23,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] SUI Defender v6: added PEPE coin enemy (green frog face logo, +40 pts), increased all meteor speeds (BTC 2.8x, ETH 2.2x, SOL 1.6x, PEPE 2.5x), updated start screen with PEPE score info
 - [x] SUI Defender v7: player login system with localStorage, leaderboard (top 10 scores), player name in HUD
 - [x] SUI Defender v8: boss projectile attacks - PEPE KING and BONK BOSS now fire projectiles at SUI (low damage, not too strong)
+- [x] DogSui Defender v9: renamed game from "SUI Defender" to "DogSui Defender", added logo placeholder to login and start screens
 
 ## Current Structure
 
