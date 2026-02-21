@@ -13,8 +13,8 @@ interface LeaderboardData {
   players: PlayerScore[];
 }
 
-const LEADERBOARD_KEY = "suiDefenderLeaderboard";
-const PLAYER_NAME_KEY = "suiDefenderPlayerName";
+const LEADERBOARD_KEY = "dogSuiDefenderLeaderboard";
+const PLAYER_NAME_KEY = "dogSuiDefenderPlayerName";
 
 function loadLeaderboard(): LeaderboardData {
   if (typeof window === "undefined") return { players: [] };
@@ -1268,7 +1268,7 @@ export default function Game() {
 
   const stateRef = useRef<GameState>({
     score: 100,
-    highScore: typeof window !== "undefined" ? parseInt(localStorage.getItem("suiDefenderHighScore") || "0") : 0,
+    highScore: typeof window !== "undefined" ? parseInt(localStorage.getItem("dogSuiDefenderHighScore") || "0") : 0,
     hp: 100,
     meteors: [],
     particles: [],
@@ -1305,7 +1305,7 @@ export default function Game() {
 
   const resetState = useCallback(() => {
     const prev = stateRef.current;
-    const savedHighScore = typeof window !== "undefined" ? parseInt(localStorage.getItem("suiDefenderHighScore") || "0") : 0;
+    const savedHighScore = typeof window !== "undefined" ? parseInt(localStorage.getItem("dogSuiDefenderHighScore") || "0") : 0;
     stateRef.current = {
       score: 100,
       highScore: savedHighScore,
@@ -1797,7 +1797,7 @@ export default function Game() {
           state.gameOver = true;
           if (state.score > state.highScore) {
             state.highScore = state.score;
-            localStorage.setItem("suiDefenderHighScore", state.score.toString());
+            localStorage.setItem("dogSuiDefenderHighScore", state.score.toString());
           }
           // Save score to leaderboard
           const name = playerNameRef.current || "Player";
@@ -1997,7 +1997,7 @@ export default function Game() {
       ctx.fillStyle = state.currentPhase === 1 ? "rgba(0,200,255,0.85)" : "rgba(255,215,0,0.85)";
       ctx.font = "bold 16px monospace";
       ctx.textAlign = "center";
-      ctx.fillText(state.currentPhase === 1 ? "⚡ SUI DEFENDER ⚡" : "⚡ SUI DEFENDER: MEME WARS ⚡", CENTER_X, 14);
+      ctx.fillText(state.currentPhase === 1 ? "⚡ DogSui Defender ⚡" : "⚡ DogSui Defender: MEME WARS ⚡", CENTER_X, 14);
 
       // Active power-ups display
       const activeY = 70;
@@ -2247,7 +2247,7 @@ export default function Game() {
               // Save high score
               if (state.score > state.highScore) {
                 state.highScore = state.score;
-                localStorage.setItem("suiDefenderHighScore", state.score.toString());
+                localStorage.setItem("dogSuiDefenderHighScore", state.score.toString());
               }
               // Save score to leaderboard
               const name = playerNameRef.current || "Player";
@@ -2638,6 +2638,14 @@ export default function Game() {
           >
             {/* Title */}
             <div style={{ textAlign: "center" }}>
+              {/* Logo do jogo */}
+              <div style={{ marginBottom: "16px" }}>
+                <img
+                  src="https://ipfs.io/ipfs/QmaF3N8z338Z3x8z3x8z3x8z3x8z3x8z3x8z3x8z3x8z3"
+                  alt="DOGSUI-DEFENDER Logo"
+                  style={{ width: "200px", height: "200px", objectFit: "contain" }}
+                />
+              </div>
               <div
                 style={{
                   fontSize: "42px",
@@ -2649,7 +2657,7 @@ export default function Game() {
                   marginBottom: "8px",
                 }}
               >
-                ⚡ SUI DEFENDER ⚡
+                ⚡ DogSui Defender ⚡
               </div>
               <div style={{ color: "rgba(255,255,255,0.6)", fontFamily: "monospace", fontSize: "14px" }}>
                 Digite seu nome para começar
@@ -2772,6 +2780,14 @@ export default function Game() {
           >
             {/* Title */}
             <div style={{ textAlign: "center" }}>
+              {/* Logo do jogo */}
+              <div style={{ marginBottom: "16px" }}>
+                <img
+                  src="https://ipfs.io/ipfs/QmaF3N8z338Z3x8z3x8z3x8z3x8z3x8z3x8z3x8z3x8z3"
+                  alt="DogSui Defender Logo"
+                  style={{ width: "200px", height: "200px", objectFit: "contain" }}
+                />
+              </div>
               <div
                 style={{
                   fontSize: "46px",
@@ -2783,7 +2799,7 @@ export default function Game() {
                   marginBottom: "6px",
                 }}
               >
-                ⚡ SUI DEFENDER ⚡
+                ⚡ DogSui Defender ⚡
               </div>
               <div style={{ color: "rgba(255,255,255,0.55)", fontFamily: "monospace", fontSize: "13px" }}>
                 Protect the SUI coin from crypto meteors!
