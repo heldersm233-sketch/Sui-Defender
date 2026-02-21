@@ -210,6 +210,18 @@ interface ActivePowerUp {
 // Boss types for each phase
 type BossType = "PEPE_KING" | "BONK_BOSS";
 
+// Boss projectile - attacks fired by bosses
+interface BossProjectile {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  color: string;
+  damage: number;
+}
+
 // Boss enemy - different boss for each phase
 interface Boss {
   id: number;
@@ -261,6 +273,7 @@ interface GameState {
   currentPhase: 1 | 2;
   boss: Boss | null;
   bossDefeated: boolean;
+  bossProjectiles: BossProjectile[];
 }
 
 // ─── Web Audio ────────────────────────────────────────────────────────────────
@@ -607,6 +620,34 @@ function spawnBoss(id: number, bossType: BossType): Boss {
     rotSpeed: isPhase1 ? 0.008 : 0.012,
     attackTimer: 0,
     phase: 1,
+  };
+}
+
+// Spawn boss projectile - fires toward SUI center
+function spawnBossProjectile(id: number, bossX: number, bossY: number, bossType: BossType): BossProjectile {
+  // Calculate direction toward SUI center
+  const dx = CENTER_X - bossX;
+  const dy = CENTER_Y - bossY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  // Speed based on boss type (BONK is faster)
+  const speed = bossType === "PEPE_KING" ? 2.5 : 3.5;
+  
+  // Add some randomness to make it less predictable
+  const angleOffset = (Math.random() - 0.5) * 0.4; // ±0.2 radians
+  
+  const vx = (dx / dist) * speed * Math.cos(angleOffset) - (dy / dist) * speed * Math.sin(angleOffset);
+  const vy = (dy / dist) * speed * Math.cos(angleOffset) + (dx / dist) * speed * Math.sin(angleOffset);
+  
+  return {
+    id,
+    x: bossX,
+    y: bossY,
+    vx,
+    vy,
+    radius: bossType === "PEPE_KING" ? 8 : 10,
+    color: bossType === "PEPE_KING" ? "#00FF88" : "#FF6B35",
+    damage: bossType === "PEPE_KING" ? 3 : 5, // Low damage - not too strong
   };
 }
 
@@ -1257,6 +1298,7 @@ export default function Game() {
     currentPhase: 1,
     boss: null,
     bossDefeated: false,
+    bossProjectiles: [],
   });
   const animFrameRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
@@ -1296,6 +1338,7 @@ export default function Game() {
       currentPhase: 1,
       boss: null,
       bossDefeated: false,
+      bossProjectiles: [],
     };
   }, []);
 
@@ -2249,6 +2292,13 @@ export default function Game() {
             }
           }
           
+          // Boss fires projectiles at SUI - not too often, not too strong
+          const projectileRate = boss.type === "PEPE_KING" ? 80 : 60; // PEPE slower, BONK faster
+          if (boss.attackTimer % projectileRate === 0 && boss.y > 100) {
+            const projectile = spawnBossProjectile(state.nextMeteorId++, boss.x, boss.y, boss.type);
+            state.bossProjectiles.push(projectile);
+          }
+          
           // Check if waves hit boss
           for (let i = state.waves.length - 1; i >= 0; i--) {
             const w = state.waves[i];
@@ -2289,6 +2339,38 @@ export default function Game() {
               break;
             }
           }
+          
+          // Update boss projectiles
+          for (let i = state.bossProjectiles.length - 1; i >= 0; i--) {
+            const proj = state.bossProjectiles[i];
+            proj.x += proj.vx;
+            proj.y += proj.vy;
+            
+            // Check collision with SUI
+            const dx = proj.x - CENTER_X;
+            const dy = proj.y - CENTER_Y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < SUI_RADIUS + proj.radius) {
+              // Hit SUI - deal damage
+              state.hp -= proj.damage;
+              createExplosion(state.particles, proj.x, proj.y, proj.color, 10);
+              state.suiShake = { x: 0, y: 0, timer: 8 };
+              state.bgFlash = { color: proj.color, alpha: 0.2 };
+              state.bossProjectiles.splice(i, 1);
+              
+              if (state.hp <= 0) {
+                state.hp = 0;
+                state.gameOver = true;
+              }
+              continue;
+            }
+            
+            // Remove if off screen
+            if (proj.x < -50 || proj.x > WIDTH + 50 || proj.y < -50 || proj.y > HEIGHT + 50) {
+              state.bossProjectiles.splice(i, 1);
+            }
+          }
         }
       }
 
@@ -2300,6 +2382,30 @@ export default function Game() {
       // Draw boss (both phases)
       if (state.boss && !state.bossDefeated) {
         drawBoss(ctx, state.boss);
+        
+        // Draw boss projectiles
+        for (const proj of state.bossProjectiles) {
+          ctx.save();
+          ctx.translate(proj.x, proj.y);
+          
+          // Glow effect
+          ctx.shadowColor = proj.color;
+          ctx.shadowBlur = 15;
+          
+          // Outer ring
+          ctx.beginPath();
+          ctx.arc(0, 0, proj.radius, 0, Math.PI * 2);
+          ctx.fillStyle = proj.color;
+          ctx.fill();
+          
+          // Inner core (darker)
+          ctx.beginPath();
+          ctx.arc(0, 0, proj.radius * 0.5, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(0,0,0,0.5)";
+          ctx.fill();
+          
+          ctx.restore();
+        }
         
         // Boss HP bar - larger and more prominent
         const barW = 400;
