@@ -21,6 +21,8 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] SUI Defender v4: waves fire from click position (anywhere on screen), initial balance 100 SUI, score rewards BTC=+50/ETH=+30/SOL=+20 with colored popups, Restart button on Game Over screen, BTC fastest/ETH medium/SOL slowest speed
 - [x] SUI Defender v5: fixed strong attack (3 staggered rings from SUI center, covers full screen), upbeat chiptune music (bass+melody+harmony+kick+hihat), start screen in Portuguese with instructions + "SUIMEMECOIN em breve" promo banner with X link
 - [x] SUI Defender v6: added PEPE coin enemy (green frog face logo, +40 pts), increased all meteor speeds (BTC 2.8x, ETH 2.2x, SOL 1.6x, PEPE 2.5x), updated start screen with PEPE score info
+- [x] SUI Defender v7: player login system with localStorage, leaderboard (top 10 scores), player name in HUD
+- [x] SUI Defender v8: boss projectile attacks - PEPE KING and BONK BOSS now fire projectiles at SUI (low damage, not too strong)
 
 ## Current Structure
 
