@@ -24,6 +24,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] SUI Defender v7: player login system with localStorage, leaderboard (top 10 scores), player name in HUD
 - [x] SUI Defender v8: boss projectile attacks - PEPE KING and BONK BOSS now fire projectiles at SUI (low damage, not too strong)
 - [x] DogSui Defender v9: renamed game from "SUI Defender" to "DogSui Defender", added logo placeholder to login and start screens
+- [x] DOGSUI-DEFENDER v10: updated game title to "DOGSUI-DEFENDER" (uppercase with hyphen) in all screens (HUD, login, start)
 
 ## Current Structure
 
