@@ -2,6 +2,74 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 
+// ─── Player & Leaderboard Types ───────────────────────────────────────────────
+interface PlayerScore {
+  name: string;
+  score: number;
+  date: string;
+}
+
+interface LeaderboardData {
+  players: PlayerScore[];
+}
+
+const LEADERBOARD_KEY = "suiDefenderLeaderboard";
+const PLAYER_NAME_KEY = "suiDefenderPlayerName";
+
+function loadLeaderboard(): LeaderboardData {
+  if (typeof window === "undefined") return { players: [] };
+  try {
+    const data = localStorage.getItem(LEADERBOARD_KEY);
+    if (data) return JSON.parse(data);
+  } catch {
+    // ignore
+  }
+  return { players: [] };
+}
+
+function saveLeaderboard(data: LeaderboardData): void {
+  try {
+    localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(data));
+  } catch {
+    // ignore
+  }
+}
+
+function addScoreToLeaderboard(name: string, score: number): void {
+  const data = loadLeaderboard();
+  const newScore: PlayerScore = {
+    name,
+    score,
+    date: new Date().toLocaleDateString("pt-BR"),
+  };
+  data.players.push(newScore);
+  // Sort by score descending, keep top 10
+  data.players.sort((a, b) => b.score - a.score);
+  data.players = data.players.slice(0, 10);
+  saveLeaderboard(data);
+}
+
+function getTopPlayers(): PlayerScore[] {
+  return loadLeaderboard().players.slice(0, 5);
+}
+
+function loadPlayerName(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem(PLAYER_NAME_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function savePlayerName(name: string): void {
+  try {
+    localStorage.setItem(PLAYER_NAME_KEY, name);
+  } catch {
+    // ignore
+  }
+}
+
 const WIDTH = 900;
 const HEIGHT = 650;
 const SUI_RADIUS = 55;
@@ -1149,9 +1217,13 @@ function drawBoss(ctx: CanvasRenderingContext2D, boss: Boss) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [gamePhase, setGamePhase] = useState<"start" | "playing" | "paused" | "gameover" | "phasecomplete">("start");
-  const gamePhaseRef = useRef<"start" | "playing" | "paused" | "gameover" | "phasecomplete">("start");
+  const [gamePhase, setGamePhase] = useState<"login" | "start" | "playing" | "paused" | "gameover" | "phasecomplete">("login");
+  const gamePhaseRef = useRef<"login" | "start" | "playing" | "paused" | "gameover" | "phasecomplete">("login");
   const [finalScore, setFinalScore] = useState(0);
+  const [playerName, setPlayerName] = useState("");
+  const [topPlayers, setTopPlayers] = useState<PlayerScore[]>([]);
+  const playerNameRef = useRef<string>("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const stateRef = useRef<GameState>({
     score: 100,
@@ -1316,6 +1388,16 @@ export default function Game() {
     }
   }, []);
 
+  // ── Login handler ──────────────────────────────────────────────────────────
+  const handleLogin = useCallback(() => {
+    const name = playerName.trim() || "Player";
+    savePlayerName(name);
+    playerNameRef.current = name;
+    setTopPlayers(getTopPlayers());
+    gamePhaseRef.current = "start";
+    setGamePhase("start");
+  }, [playerName]);
+
   // ── Start / Restart game ──────────────────────────────────────────────────
   const startGame = useCallback(() => {
     resetState();
@@ -1330,6 +1412,21 @@ export default function Game() {
     setGamePhase("playing");
     startMusic();
   }, [resetState]);
+
+  // ── Load saved player name on mount ────────────────────────────────────────
+  useEffect(() => {
+    const savedName = loadPlayerName();
+    if (savedName) {
+      playerNameRef.current = savedName;
+    }
+    // Use requestAnimationFrame to defer setState
+    requestAnimationFrame(() => {
+      if (savedName) {
+        setPlayerName(savedName);
+      }
+      setTopPlayers(getTopPlayers());
+    });
+  }, []);
 
   // ── Game loop ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1659,6 +1756,10 @@ export default function Game() {
             state.highScore = state.score;
             localStorage.setItem("suiDefenderHighScore", state.score.toString());
           }
+          // Save score to leaderboard
+          const name = playerNameRef.current || "Player";
+          addScoreToLeaderboard(name, state.score);
+          setTopPlayers(getTopPlayers());
           setFinalScore(state.score);
           gamePhaseRef.current = "phasecomplete";
           setGamePhase("phasecomplete");
@@ -1768,6 +1869,14 @@ export default function Game() {
     const drawHUD = (ctx: CanvasRenderingContext2D, state: GameState) => {
       ctx.save();
 
+      // Player name
+      const name = playerNameRef.current || "Player";
+      ctx.fillStyle = "rgba(0,200,255,0.7)";
+      ctx.font = "12px monospace";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText(`👤 ${name}`, 18, 4);
+
       // Score
       ctx.shadowColor = "#ffd700";
       ctx.shadowBlur = 12;
@@ -1775,14 +1884,14 @@ export default function Game() {
       ctx.font = "bold 26px monospace";
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(`$${state.score.toLocaleString()} SUI`, 18, 16);
+      ctx.fillText(`$${state.score.toLocaleString()} SUI`, 18, 20);
       ctx.shadowBlur = 0;
 
       // High score
       if (state.highScore > 0) {
         ctx.fillStyle = "rgba(255,215,0,0.5)";
         ctx.font = "12px monospace";
-        ctx.fillText(`BEST: $${state.highScore.toLocaleString()}`, 18, 46);
+        ctx.fillText(`BEST: $${state.highScore.toLocaleString()}`, 18, 50);
       }
 
       // Phase indicator
@@ -1837,7 +1946,7 @@ export default function Game() {
         ctx.shadowColor = state.combo >= 10 ? "#ff4466" : "#00ffcc";
         ctx.shadowBlur = 10;
         ctx.textAlign = "left";
-        ctx.fillText(`${state.combo}x COMBO!`, 18, 64);
+        ctx.fillText(`${state.combo}x COMBO!`, 18, 68);
         ctx.shadowBlur = 0;
       }
 
@@ -2097,6 +2206,10 @@ export default function Game() {
                 state.highScore = state.score;
                 localStorage.setItem("suiDefenderHighScore", state.score.toString());
               }
+              // Save score to leaderboard
+              const name = playerNameRef.current || "Player";
+              addScoreToLeaderboard(name, state.score);
+              setTopPlayers(getTopPlayers());
               gamePhaseRef.current = "gameover";
               setGamePhase("gameover");
               stopMusic();
@@ -2402,6 +2515,140 @@ export default function Game() {
           }}
         />
 
+        {/* Login screen overlay */}
+        {gamePhase === "login" && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: "16px",
+              background: "rgba(2,4,8,0.95)",
+              gap: "24px",
+            }}
+          >
+            {/* Title */}
+            <div style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  fontSize: "42px",
+                  fontWeight: "bold",
+                  fontFamily: "monospace",
+                  color: "#00c8ff",
+                  textShadow: "0 0 30px #00c8ff, 0 0 60px #0088cc",
+                  letterSpacing: "4px",
+                  marginBottom: "8px",
+                }}
+              >
+                ⚡ SUI DEFENDER ⚡
+              </div>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontFamily: "monospace", fontSize: "14px" }}>
+                Digite seu nome para começar
+              </div>
+            </div>
+
+            {/* Login form */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "16px",
+              }}
+            >
+              <input
+                ref={inputRef}
+                type="text"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleLogin();
+                }}
+                placeholder="Seu nome de jogador"
+                maxLength={20}
+                autoFocus
+                style={{
+                  width: "280px",
+                  padding: "14px 20px",
+                  fontSize: "18px",
+                  fontFamily: "monospace",
+                  background: "rgba(0,200,255,0.1)",
+                  border: "2px solid rgba(0,200,255,0.4)",
+                  borderRadius: "10px",
+                  color: "#ffffff",
+                  outline: "none",
+                  textAlign: "center",
+                  textShadow: "0 0 10px rgba(0,200,255,0.5)",
+                }}
+              />
+              <button
+                onClick={handleLogin}
+                style={{
+                  padding: "14px 48px",
+                  fontSize: "18px",
+                  fontWeight: "bold",
+                  fontFamily: "monospace",
+                  background: "linear-gradient(135deg, #00c8ff, #0066cc)",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  boxShadow: "0 0 24px rgba(0,200,255,0.5)",
+                  letterSpacing: "2px",
+                  transition: "transform 0.1s, box-shadow 0.1s",
+                }}
+                onMouseEnter={e => {
+                  (e.target as HTMLButtonElement).style.transform = "scale(1.06)";
+                  (e.target as HTMLButtonElement).style.boxShadow = "0 0 40px rgba(0,200,255,0.8)";
+                }}
+                onMouseLeave={e => {
+                  (e.target as HTMLButtonElement).style.transform = "scale(1)";
+                  (e.target as HTMLButtonElement).style.boxShadow = "0 0 24px rgba(0,200,255,0.5)";
+                }}
+              >
+                🎮 ENTRAR
+              </button>
+            </div>
+
+            {/* Leaderboard preview */}
+            {topPlayers.length > 0 && (
+              <div
+                style={{
+                  background: "rgba(255,215,0,0.08)",
+                  border: "1px solid rgba(255,215,0,0.3)",
+                  borderRadius: "12px",
+                  padding: "16px 24px",
+                  textAlign: "center",
+                  fontFamily: "monospace",
+                }}
+              >
+                <div style={{ color: "#ffd700", fontWeight: "bold", fontSize: "16px", marginBottom: "12px" }}>
+                  🏆 TOP PLAYERS
+                </div>
+                {topPlayers.map((player, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "24px",
+                      padding: "4px 0",
+                      color: idx === 0 ? "#ffd700" : idx === 1 ? "#c0c0c0" : idx === 2 ? "#cd7f32" : "rgba(255,255,255,0.7)",
+                      fontSize: "14px",
+                    }}
+                  >
+                    <span>{idx + 1}. {player.name}</span>
+                    <span>${player.score.toLocaleString()} SUI</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Start screen overlay */}
         {gamePhase === "start" && (
           <div
@@ -2503,6 +2750,40 @@ export default function Game() {
             >
               🚀 JOGAR
             </button>
+
+            {/* Leaderboard */}
+            {topPlayers.length > 0 && (
+              <div
+                style={{
+                  background: "rgba(255,215,0,0.08)",
+                  border: "1px solid rgba(255,215,0,0.3)",
+                  borderRadius: "12px",
+                  padding: "12px 24px",
+                  textAlign: "center",
+                  fontFamily: "monospace",
+                }}
+              >
+                <div style={{ color: "#ffd700", fontWeight: "bold", fontSize: "14px", marginBottom: "8px" }}>
+                  🏆 RANKING
+                </div>
+                {topPlayers.slice(0, 3).map((player, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "24px",
+                      padding: "2px 0",
+                      color: idx === 0 ? "#ffd700" : idx === 1 ? "#c0c0c0" : "#cd7f32",
+                      fontSize: "12px",
+                    }}
+                  >
+                    <span>{idx + 1}. {player.name}</span>
+                    <span>${player.score.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* SUI memecoin promo */}
             <div
