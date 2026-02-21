@@ -1997,7 +1997,7 @@ export default function Game() {
       ctx.fillStyle = state.currentPhase === 1 ? "rgba(0,200,255,0.85)" : "rgba(255,215,0,0.85)";
       ctx.font = "bold 16px monospace";
       ctx.textAlign = "center";
-      ctx.fillText(state.currentPhase === 1 ? "⚡ DogSui Defender ⚡" : "⚡ DogSui Defender: MEME WARS ⚡", CENTER_X, 14);
+      ctx.fillText(state.currentPhase === 1 ? "⚡ DOGSUI-DEFENDER ⚡" : "⚡ DOGSUI-DEFENDER: MEME WARS ⚡", CENTER_X, 14);
 
       // Active power-ups display
       const activeY = 70;
@@ -2657,7 +2657,7 @@ export default function Game() {
                   marginBottom: "8px",
                 }}
               >
-                ⚡ DogSui Defender ⚡
+                ⚡ DOGSUI-DEFENDER ⚡
               </div>
               <div style={{ color: "rgba(255,255,255,0.6)", fontFamily: "monospace", fontSize: "14px" }}>
                 Digite seu nome para começar
@@ -2784,7 +2784,7 @@ export default function Game() {
               <div style={{ marginBottom: "16px" }}>
                 <img
                   src="https://ipfs.io/ipfs/QmaF3N8z338Z3x8z3x8z3x8z3x8z3x8z3x8z3x8z3x8z3"
-                  alt="DogSui Defender Logo"
+                  alt="DOGSUI-DEFENDER Logo"
                   style={{ width: "200px", height: "200px", objectFit: "contain" }}
                 />
               </div>
@@ -2799,7 +2799,7 @@ export default function Game() {
                   marginBottom: "6px",
                 }}
               >
-                ⚡ DogSui Defender ⚡
+                ⚡ DOGSUI-DEFENDER ⚡
               </div>
               <div style={{ color: "rgba(255,255,255,0.55)", fontFamily: "monospace", fontSize: "13px" }}>
                 Protect the SUI coin from crypto meteors!
